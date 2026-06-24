@@ -1,0 +1,17 @@
+# Secrets — NUNCA commitear
+.env
+.env.local
+*.local
+
+# Artefactos de scraping/scratch
+_reto_render.txt
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Node (por si se agrega tooling)
+node_modules/
+npm-debug.log*

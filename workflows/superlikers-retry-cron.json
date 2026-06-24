@@ -1,0 +1,191 @@
+{
+  "name": "Superlikers: Retry Queue Worker",
+  "nodes": [
+    {
+      "id": "5e6dffe9-39d8-444f-a801-13ff563c740c",
+      "name": "Every 2 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [0, 96],
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "hours", "hoursInterval": 2}]
+        }
+      }
+    },
+    {
+      "id": "10cf1d01-760f-43ad-b273-10f74ad54455",
+      "name": "Get Pending Retries",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [224, 96],
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {"__rl": true, "mode": "id", "value": "F7RemUCjuKZT4JBL"},
+        "filters": {
+          "conditions": [{"keyName": "status", "keyValue": "pending"}]
+        },
+        "returnAll": true
+      },
+      "notes": "Lee la cola de reintentos pendientes (timeout/503). 0 filas -> no hay trabajo, el flujo se corta solo."
+    },
+    {
+      "id": "e3474061-b66f-4cb6-afc5-89082e06147c",
+      "name": "Prep Replay",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [448, 96],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "let payload = {};\ntry { payload = JSON.parse($json.payload_object || '{}'); } catch (e) {}\nreturn { rowId: $json.id, endpoint: $json.endpoint, method: 'POST', body: Object.assign({ campaign: '3z', distinct_id: $json.distinctId }, payload), attempts: Number($json.attempts) || 0, phone: $json.phone || '', idempotencyKey: $json.idempotencyKey || '' };"
+      },
+      "notes": "Reconstruye el body minimo para el replay idempotente (campaign+distinct_id+payload)."
+    },
+    {
+      "id": "99a69652-11bf-4ab4-992e-3e4f0f7fcdf8",
+      "name": "Replay via Superlikers Request",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [672, 96],
+      "parameters": {
+        "workflowId": {"__rl": true, "mode": "id", "value": "iMWPZE5gVhbc4Sge"},
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "endpoint": "={{ $json.endpoint }}",
+            "method": "={{ $json.method }}",
+            "body": "={{ $json.body }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {"id": "endpoint", "displayName": "endpoint", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string"},
+            {"id": "method", "displayName": "method", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string"},
+            {"id": "body", "displayName": "body", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "object"}
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {"waitForSubWorkflow": true}
+      },
+      "onError": "continueErrorOutput",
+      "notes": "Replay idempotente via Superlikers: Request. errorType/ok decide el destino."
+    },
+    {
+      "id": "70f7047c-3df1-4029-8de9-e9fb2279af83",
+      "name": "Slack Fallback (Output Error)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.5,
+      "position": [896, 192],
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {"__rl": true, "mode": "name", "value": "general"},
+        "text": "=Superlikers Retry Worker: error ejecutando el replay del sub-workflow para {{ $(\"Prep Replay\").item.json.phone }} ({{ $(\"Prep Replay\").item.json.endpoint }}).",
+        "otherOptions": {}
+      },
+      "webhookId": "48656011-e6fa-4c41-bb35-9d73c4d57c68",
+      "notes": "Fallback Output Error: el Execute Workflow del replay fallo a nivel ejecucion."
+    },
+    {
+      "id": "238d8ef2-bad5-46af-b22f-0c9bae670dee",
+      "name": "Evaluate Replay",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [896, 0],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const r = $json;\nconst ctx = $('Prep Replay').item.json;\nconst ok = r && r.ok === true;\nlet newAttempts = (ctx.attempts || 0) + 1;\nlet newStatus = 'pending';\nlet needSlack = false;\nif (ok) { newStatus = 'done'; }\nelse if (newAttempts >= 3) { newStatus = 'fail'; needSlack = true; }\nreturn { rowId: ctx.rowId, ok, newStatus, newAttempts, needSlack, phone: ctx.phone, endpoint: ctx.endpoint, errorType: (r && r.errorType) || 'unknown' };"
+      },
+      "notes": "ok -> done; fallo y attempts>=3 -> fail + Slack; sino sigue pending con attempts+1."
+    },
+    {
+      "id": "da8dea6b-53f4-45c2-a171-7a1233c2bfde",
+      "name": "Update Retry Row",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [1120, 0],
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {"__rl": true, "mode": "id", "value": "F7RemUCjuKZT4JBL"},
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [{"keyValue": "={{ $json.rowId }}"}]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "={{ $json.newStatus }}",
+            "attempts": "={{ $json.newAttempts }}"
+          }
+        },
+        "options": {}
+      },
+      "notes": "Actualiza status/attempts de la fila reintentada."
+    },
+    {
+      "id": "3464813b-ff72-4a64-93e2-2e4f0f7fcdf8",
+      "name": "Need Slack?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1344, 0],
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 1},
+          "conditions": [{"leftValue": "={{ $(\"Evaluate Replay\").item.json.needSlack }}", "operator": {"type": "boolean", "operation": "true"}}],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "67c7f3d7-8d32-4ba0-9e60-3831697796cf",
+      "name": "Notify Max Attempts Failure",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.5,
+      "position": [1568, 0],
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {"__rl": true, "mode": "name", "value": "general"},
+        "text": "=Superlikers retry FAILED tras 3 intentos. phone {{ $(\"Evaluate Replay\").item.json.phone }} endpoint {{ $(\"Evaluate Replay\").item.json.endpoint }} errorType {{ $(\"Evaluate Replay\").item.json.errorType }}. Requiere revision manual.",
+        "otherOptions": {}
+      },
+      "webhookId": "776b8d6b-d38f-4977-a3f3-52ce63aeafd8",
+      "notes": "Notifica a Slack cuando un reintento agota los 3 intentos."
+    },
+    {
+      "id": "539b2972-d601-466d-aa16-fb429b6894e0",
+      "name": "Sticky Note ffaa9d44",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-48, -48],
+      "parameters": {
+        "content": "### Superlikers: Retry Queue Worker\nCRON 2h -> lee pendientes -> replay idempotente via Superlikers: Request -> done/fail.\nSlack en max-attempts y en Output Error del Execute Workflow.",
+        "height": 200,
+        "width": 300,
+        "color": 3
+      }
+    }
+  ],
+  "connections": {
+    "Every 2 Hours": {"main": [[{"node": "Get Pending Retries", "type": "main", "index": 0}]]},
+    "Get Pending Retries": {"main": [[{"node": "Prep Replay", "type": "main", "index": 0}]]},
+    "Prep Replay": {"main": [[{"node": "Replay via Superlikers Request", "type": "main", "index": 0}]]},
+    "Replay via Superlikers Request": {"main": [
+      [{"node": "Evaluate Replay", "type": "main", "index": 0}],
+      [{"node": "Slack Fallback (Output Error)", "type": "main", "index": 0}]
+    ]},
+    "Evaluate Replay": {"main": [[{"node": "Update Retry Row", "type": "main", "index": 0}]]},
+    "Update Retry Row": {"main": [[{"node": "Need Slack?", "type": "main", "index": 0}]]},
+    "Need Slack?": {"main": [[{"node": "Notify Max Attempts Failure", "type": "main", "index": 0}]]}
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "binaryMode": "separate"
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "superlikers-wa-bot"
+  }
+}
