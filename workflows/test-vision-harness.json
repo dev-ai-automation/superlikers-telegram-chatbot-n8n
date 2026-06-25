@@ -1,0 +1,94 @@
+{
+  "name": "TEST: Vision Harness (Superlikers)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "e6eee45e-9074-485c-a3b2-82ba6fa2f6fc",
+      "name": "Run Test",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://raw.githubusercontent.com/dev-ai-automation/superlikers-telegram-chatbot-n8n/main/fixtures/invoice-illegible.png",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "6ab3afbf-d372-4c61-b2ae-fd04a809613c",
+      "name": "Fetch Fixture",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "VeL0Lewf2pIojSsm"
+        },
+        "workflowInputs": {
+          "mappingMode": "passthrough",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "fb58baa4-00d5-4d73-bfe0-1bacb7375208",
+      "name": "Vision",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        448,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Run Test": {
+      "main": [
+        [
+          {
+            "node": "Fetch Fixture",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Fixture": {
+      "main": [
+        [
+          {
+            "node": "Vision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "binaryMode": "separate"
+  },
+  "pinData": {}
+}

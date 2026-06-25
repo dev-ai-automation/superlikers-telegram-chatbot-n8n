@@ -2,93 +2,138 @@
   "name": "Vision: Read Invoice",
   "nodes": [
     {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
       "id": "6f72d4df-6235-4c4d-ab29-692fb4996306",
       "name": "When Called: image binary",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.2,
-      "position": [0, 0],
-      "parameters": {
-        "inputSource": "passthrough"
-      }
+      "position": [
+        0,
+        0
+      ]
     },
     {
-      "id": "474d93b8-5e7d-49e6-9b51-456bdb10ace8",
-      "name": "Compress Image 1024",
-      "type": "n8n-nodes-base.editImage",
-      "typeVersion": 1,
-      "position": [224, 0],
       "parameters": {
         "operation": "resize",
-        "dataPropertyName": "data",
         "width": 1024,
         "height": 1024,
         "resizeOption": "onlyIfLarger",
         "options": {
+          "destinationKey": "data",
           "format": "jpeg",
-          "quality": 80,
-          "destinationKey": "data"
+          "quality": 80
         }
       },
+      "id": "474d93b8-5e7d-49e6-9b51-456bdb10ace8",
+      "name": "Compress Image 1024",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [
+        224,
+        0
+      ],
       "notes": "QUICK WIN: jpeg q80 + 1024 onlyIfLarger -> ~50% menos tokens de vision sin deformar el ticket. Conserva aspect ratio."
     },
     {
-      "id": "18b58a7b-43ee-4fe4-96d3-7f886f26afe7",
-      "name": "GPT-4.1 Vision Analyze",
-      "type": "@n8n/n8n-nodes-langchain.openAi",
-      "typeVersion": 2.1,
-      "position": [448, 0],
       "parameters": {
         "resource": "image",
         "operation": "analyze",
-        "modelId": {"__rl": true, "mode": "id", "value": "gpt-4.1"},
+        "modelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "gpt-4.1"
+        },
         "text": "Eres un extractor de datos de facturas/tickets de compra a partir de UNA imagen.\n\n### TAREA\nAnaliza la imagen y devuelve UNICAMENTE un objeto JSON valido (UTF-8), sin texto adicional, sin explicaciones y sin bloques de codigo markdown (sin fences).\n\n### ESTRUCTURA EXACTA\n{\"legible\":true,\"ref\":\"<n factura/ticket>\",\"detected_type\":\"factura\",\"reason\":\"ok\",\"products\":[{\"ref\":\"<cod/desc>\",\"price\":\"<num>\",\"quantity\":\"<num>\",\"line\":\"<opcional>\",\"provider\":\"<opcional>\"}]}\n\n### REGLAS\n1. price y quantity SIEMPRE como string numerico sin moneda ni separadores de miles (punto decimal si aplica). Ej: \"1299.50\", \"3\".\n2. Determina detected_type observando la imagen, eligiendolo de: factura, ticket, selfie, persona, paisaje, documento, captura_pantalla, producto, otro.\n3. Si la imagen ES un ticket/factura legible CON numero de referencia Y al menos un producto: legible=true, reason=\"ok\".\n4. Si NO es factura/ticket, o es ilegible, o falta ref, o falta products: legible=false, products=[], ref=\"\", detected_type=<lo que observes>, reason= \"no_factura\" | \"ilegible\" | \"campos_faltantes\".\n5. Usa SOLO datos visibles. No inventes ni completes datos faltantes.\n\n### EJEMPLO DE SALIDA (no factura)\n{\"legible\":false,\"ref\":\"\",\"detected_type\":\"selfie\",\"reason\":\"no_factura\",\"products\":[]}",
         "inputType": "base64",
-        "binaryPropertyName": "data",
         "simplify": false,
         "options": {
           "detail": "high",
           "maxTokens": 900
         }
       },
+      "id": "18b58a7b-43ee-4fe4-96d3-7f886f26afe7",
+      "name": "GPT-4.1 Vision Analyze",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        448,
+        0
+      ],
       "notes": "gpt-4.1 (vision, -20% costo, mejor obediencia de formato). detail high para leer importes/ref. simplify:false -> respuesta cruda para parseo seguro."
     },
     {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const ACCEPTED = 'foto clara de ticket o factura (JPG o PNG)';\nlet raw = $json.output?.[0]?.content?.[0]?.text ?? $json.content ?? $json.choices?.[0]?.message?.content ?? $json.message?.content ?? (typeof $json.text === 'string' ? $json.text : '') ?? '';\nraw = String(raw).trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();\nlet out = { legible: false, ref: '', products: [], detected_type: 'desconocido', reason: 'no_json', accepted_type: ACCEPTED };\ntry {\n  const p = JSON.parse(raw);\n  const okShape = p && p.legible === true && typeof p.ref === 'string' && p.ref.trim() !== '' && Array.isArray(p.products) && p.products.length > 0;\n  if (okShape) {\n    out = { legible: true, ref: p.ref.trim(), products: p.products, detected_type: p.detected_type || 'factura', reason: 'ok', accepted_type: ACCEPTED };\n  } else {\n    out = { legible: false, ref: (p && p.ref) || '', products: (p && p.products) || [], detected_type: (p && p.detected_type) || 'desconocido', reason: (p && p.reason) || (p && p.legible === false ? 'no_factura' : 'campos_faltantes'), accepted_type: ACCEPTED };\n  }\n} catch (e) {}\nreturn out;"
+      },
       "id": "a1d289e7-97a0-4fc2-88d1-7474e7916baa",
       "name": "Safe Parse Invoice",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [672, 0],
-      "parameters": {
-        "mode": "runOnceForEachItem",
-        "jsCode": "const ACCEPTED = 'foto clara de ticket o factura (JPG o PNG)';\nlet raw = $json.content ?? $json.choices?.[0]?.message?.content ?? $json.message?.content ?? $json.text ?? '';\nraw = String(raw).trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();\nlet out = { legible: false, ref: '', products: [], detected_type: 'desconocido', reason: 'no_json', accepted_type: ACCEPTED };\ntry {\n  const p = JSON.parse(raw);\n  const okShape = p && p.legible === true && typeof p.ref === 'string' && p.ref.trim() !== '' && Array.isArray(p.products) && p.products.length > 0;\n  if (okShape) {\n    out = { legible: true, ref: p.ref.trim(), products: p.products, detected_type: p.detected_type || 'factura', reason: 'ok', accepted_type: ACCEPTED };\n  } else {\n    out = { legible: false, ref: (p && p.ref) || '', products: (p && p.products) || [], detected_type: (p && p.detected_type) || 'desconocido', reason: (p && p.reason) || (p && p.legible === false ? 'no_factura' : 'campos_faltantes'), accepted_type: ACCEPTED };\n  }\n} catch (e) {}\nreturn out;"
-      },
+      "position": [
+        672,
+        0
+      ],
       "notes": "Blindaje sin error silencioso: cualquier no-JSON -> legible:false/reason:no_json. legible:false es senal explicita. detected_type alimenta el mensaje de Telegram."
     },
     {
+      "parameters": {
+        "content": "### Vision: Read Invoice (unico punto LLM)\nIN: item con binario en $binary.data · OUT: { legible, ref, products, detected_type, reason }\nCompress 1024 -> GPT-4.1 Vision -> parseo seguro. Reemplazable (OpenAI/Gemini) sin tocar al caller.",
+        "height": 264,
+        "width": 300,
+        "color": 5
+      },
       "id": "cb682d6a-b471-4c1c-b846-1cff8e5b7706",
       "name": "Sticky Note f0fe5afb",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-50, -50],
-      "parameters": {
-        "content": "### Vision: Read Invoice (unico punto LLM)\nIN: item con binario en $binary.data · OUT: { legible, ref, products, detected_type, reason }\nCompress 1024 -> GPT-4.1 Vision -> parseo seguro. Reemplazable (OpenAI/Gemini) sin tocar al caller.",
-        "color": 5,
-        "width": 300,
-        "height": 200
-      }
+      "position": [
+        -224,
+        -272
+      ]
     }
   ],
   "connections": {
-    "When Called: image binary": {"main": [[{"node": "Compress Image 1024", "type": "main", "index": 0}]]},
-    "Compress Image 1024": {"main": [[{"node": "GPT-4.1 Vision Analyze", "type": "main", "index": 0}]]},
-    "GPT-4.1 Vision Analyze": {"main": [[{"node": "Safe Parse Invoice", "type": "main", "index": 0}]]}
+    "When Called: image binary": {
+      "main": [
+        [
+          {
+            "node": "Compress Image 1024",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compress Image 1024": {
+      "main": [
+        [
+          {
+            "node": "GPT-4.1 Vision Analyze",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT-4.1 Vision Analyze": {
+      "main": [
+        [
+          {
+            "node": "Safe Parse Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "settings": {
     "executionOrder": "v1",
-    "availableInMCP": true
+    "availableInMCP": true,
+    "binaryMode": "separate"
   },
-  "pinData": {},
-  "meta": {
-    "instanceId": "superlikers-wa-bot"
-  }
+  "pinData": {}
 }

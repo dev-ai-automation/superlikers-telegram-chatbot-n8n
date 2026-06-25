@@ -238,3 +238,39 @@ Los endpoints reales de Superlikers (search / register / photos / buy / accept) 
 | `activeVersionId` tras re-publicar | `23bbcff0` |
 | Mensaje real de respuesta del bot | `message_id` `6` |
 | Columna agregada | `replyText` (string) en `AsmN5sq4Pop0FVCi` |
+
+## Pruebas e2e REALES contra los endpoints de Superlikers (datos: Jafet Escobar)
+
+Hasta acá las "ejecuciones" eran con **pin data**: nodos pineados, respuestas simuladas. Útil para validar el grafo, **inútil** para validar el contrato real con la API. Así que se hizo lo que había que hacer desde el principio: **disparar los endpoints de verdad**, con datos reales del tester (celular `55••••5678`, email `dev.automation@…technologies.com`, chat real de Telegram `7156•••85`). Cada celda de abajo es una **respuesta REAL capturada**, no una expectativa.
+
+| Endpoint/Componente | Método | Exec | Resultado real | Hallazgo |
+|---|---|---|---|---|
+| `participants/search` | GET | `1751` | 404 `{"message":"Participante ... no encontrado","code_error":20}` | **BUG**: usaba **POST** → 405 (allows GET,HEAD). Corregido a **GET**. |
+| NLU (Claude) | — | `1755` | `{field:confirmacion, value:si, next_action:avanzar}` "¡Perfecto!…" (8.2 s de LLM real) | **OK real** |
+| `participants` (alta) | POST | `1764` | 422 `{"errors":{"tags":"no puede estar en blanco"},"code_error":21}` | **BUG**: la campaña `3z` exige `cedula`/`Ocupacion`/`tags` además de `name`/`email`/`celular`. `cedula`+`Ocupacion` ya aceptados; **`tags` requiere config del panel Superlikers** (los valores válidos salen de la lista de la campaña). |
+| Vision **LEGIBLE** | — | `1771` | GPT-4.1 → `{legible:true, ref:"FAC-3Z-000142", products:[Ref A $1000 ×4 (tech/acme), Ref B $50000 ×2 (terminator/skynet)], detected_type:factura}` | **BUG**: `Safe Parse` no leía `output[0].content[0].text` (forma del **Responses API**) → `no_json`. Corregido. |
+| Vision **ILEGIBLE** | — | `1773` | GPT-4.1 → `{legible:false, detected_type:"selfie", reason:"no_factura"}` | **OK real** |
+| `retail/buy` | POST | `1775` | 404 `{"message":"Participante ... no encontrado","code_error":20}` | **OK** (no hay participante porque el alta no cerró por `tags`) |
+| `entries/accept` | POST | `1777` | 404 `{"message":"Actividad no encontrada","code_error":40}` | **OK real** (id ficticio) |
+| **Foto REAL del usuario** (webhook) | — | `1769` | El bot respondió de verdad (`message_id` 15): *"Recibí un/a desconocido…"*; rechazada por (a) el parser de Vision **pre-fix** y (b) `Upload Photo` sin credencial | Confirma el fix de `replyText` **EN VIVO**; queda pendiente bindear el Bearer en `Upload Photo` del principal |
+
+### Lo que el testing REAL expuso (y la simulación NUNCA iba a agarrar)
+
+Y acá está el punto, porque es el corazón de todo esto: **pinear nodos te da una falsa sensación de seguridad**. El grafo "pasaba", pero cuatro bugs estaban agazapados esperando a la primera llamada real. Cuatro. Que ninguna ejecución con pin data podía ver, **justamente porque pineaban los nodos** que había que probar:
+
+1. **`replyText` perdido tras `Persist Session`** — el `Data Table` no devolvía el campo que `Send Telegram Reply` necesitaba río abajo. Con pin data el reply venía "puesto a mano" y nunca se notaba. → corregido (columna + mapeo).
+2. **`participants/search` con POST → 405** — el endpoint real solo admite **GET/HEAD**. Una simulación con respuesta pineada jamás te dice el método equivocado. → corregido a **GET**.
+3. **El alta exige campos del formulario de campaña** — `3z` no acepta un alta "mínima": pide `cedula`, `Ocupacion` y `tags`. → `cedula`+`Ocupacion` agregados y **aceptados por la API**; `tags` quedó como la única pieza pendiente porque **depende de la configuración de la campaña en el panel Superlikers** (los valores válidos los define la lista de la campaña, no el código).
+4. **Vision `Safe Parse` no leía la forma del Responses API** — el nodo de OpenAI devolvía `output[0].content[0].text` y el parser buscaba `content`/`choices[0].message.content` → caía a `no_json` (legible:false). → corregido para leer `$json.output?.[0]?.content?.[0]?.text` primero.
+
+**Los 4 quedaron corregidos**, salvo `tags`, que no es código: es configuración del panel de la campaña en Superlikers.
+
+### Cómo se probó Vision sin pasar por todo Telegram
+
+Para aislar el subworkflow de visión se montó un **harness** (`workflows/test-vision-harness.json`): `Manual Trigger` → `HTTP Request` (GET) que **baja la fixture desde GitHub raw** (`raw.githubusercontent.com/.../fixtures/invoice-illegible.png`) → `Execute Workflow` al subworkflow `Vision: Read Invoice` (GPT-4.1 **real**, `waitForSubWorkflow:true`). Así la lectura de factura se valida punta a punta con el modelo real, sin depender del bot ni del estado de la FSM. Cambiando la URL de la fixture (legible/ilegible) se cubren ambos caminos.
+
+### Fixtures usadas
+
+![Factura legible (fixture)](../fixtures/invoice-legible.png)
+
+![No-factura / selfie (fixture)](../fixtures/invoice-illegible.png)

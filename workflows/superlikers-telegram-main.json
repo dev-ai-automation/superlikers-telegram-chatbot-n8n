@@ -267,7 +267,7 @@
           "mappingMode": "defineBelow",
           "value": {
             "endpoint": "participants/search",
-            "method": "POST",
+            "method": "GET",
             "body": "={{ { campaign: '3z', query: { cellphone: $('Resolve Context').item.json.typedPhone } } }}"
           },
           "matchingColumns": [],
@@ -681,7 +681,7 @@
           "value": {
             "endpoint": "participants",
             "method": "POST",
-            "body": "={{ { campaign: '3z', properties: { name: $('Resolve Context').item.json.name, email: $('Resolve Context').item.json.email, celular: $('Resolve Context').item.json.phone }, active: true, verified_cellphone: true, not_send_verify_registration: true } }}"
+            "body": "={{ { campaign: '3z', tags: ['qa-telegram'], properties: { name: $('Resolve Context').item.json.name, email: $('Resolve Context').item.json.email, celular: $('Resolve Context').item.json.phone, cedula: '1098765432', Ocupacion: 'Automatizacion', ocupacion: 'Automatizacion' }, active: true, verified_cellphone: true, not_send_verify_registration: true } }}"
           },
           "schema": [
             {

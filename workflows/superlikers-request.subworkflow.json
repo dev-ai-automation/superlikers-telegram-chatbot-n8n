@@ -2,104 +2,146 @@
   "name": "Superlikers: Request",
   "nodes": [
     {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "endpoint"
+            },
+            {
+              "name": "method"
+            },
+            {
+              "name": "body",
+              "type": "object"
+            }
+          ]
+        }
+      },
       "id": "ddbfda4a-7afe-4368-8bae-738e8c032a56",
       "name": "When Called: endpoint+body",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.2,
-      "position": [0, 96],
-      "parameters": {
-        "inputSource": "workflowInputs",
-        "workflowInputs": {
-          "values": [
-            {"name": "endpoint", "type": "string"},
-            {"name": "method", "type": "string"},
-            {"name": "body", "type": "object"}
-          ]
-        }
-      }
+      "position": [
+        0,
+        96
+      ]
     },
     {
-      "id": "77f25ce3-5d7b-4784-b331-095a83e42a05",
-      "name": "Call Superlikers API",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
-      "position": [224, 96],
       "parameters": {
         "method": "={{ $json.method || \"POST\" }}",
         "url": "=https://api.superlikerslabs.com/v1/{{ $json.endpoint }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpBearerAuth",
         "sendBody": true,
-        "contentType": "json",
         "specifyBody": "json",
         "jsonBody": "={{ $json.body }}",
         "options": {
-          "timeout": 10000,
           "response": {
             "response": {
               "fullResponse": true,
               "neverError": true
             }
-          }
+          },
+          "timeout": 10000
         }
       },
-      "notes": "Bearer (cred [SL]: Jafet). neverError+fullResponse → 4xx/5xx llegan como data para enrutar errorType. Timeout/red tras 3 reintentos → salida de error.",
+      "id": "77f25ce3-5d7b-4784-b331-095a83e42a05",
+      "name": "Call Superlikers API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        224,
+        96
+      ],
       "retryOnFail": true,
       "maxTries": 3,
       "waitBetweenTries": 5000,
-      "onError": "continueErrorOutput"
+      "onError": "continueErrorOutput",
+      "notes": "Bearer (cred [SL]: Jafet). neverError+fullResponse → 4xx/5xx llegan como data para enrutar errorType. Timeout/red tras 3 reintentos → salida de error."
     },
     {
-      "id": "6345bf32-a30b-472c-a2e9-9a9da25e68a7",
-      "name": "Normalize Timeout/Network",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [448, 192],
       "parameters": {
         "mode": "runOnceForEachItem",
         "jsCode": "return { ok: false, statusCode: 0, data: null, errorType: 'timeout' };"
       },
+      "id": "6345bf32-a30b-472c-a2e9-9a9da25e68a7",
+      "name": "Normalize Timeout/Network",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        192
+      ],
       "notes": "Salida de error del HTTP (timeout/red) → { ok:false, errorType:timeout } para encolar reintento."
     },
     {
-      "id": "4a5a7d1d-9325-4f15-bd36-edc13381bdde",
-      "name": "Normalize Response",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [448, 0],
       "parameters": {
         "mode": "runOnceForEachItem",
         "jsCode": "const res = $json;\nconst status = Number(res.statusCode) || 0;\nconst body = res.body !== undefined ? res.body : res;\nlet bodyStr = '';\ntry { bodyStr = JSON.stringify(body || {}).toLowerCase(); } catch (e) { bodyStr = String(body || '').toLowerCase(); }\nlet errorType = 'none';\nlet ok = status >= 200 && status < 300;\nif (bodyStr.includes('sha1 is already taken')) { errorType = 'sha1_taken'; ok = false; }\nelse if (bodyStr.includes('execution_error')) { errorType = 'execution_error'; ok = false; }\nelse if (bodyStr.includes('ref') && (bodyStr.includes('already') || bodyStr.includes('duplicat') || bodyStr.includes('taken'))) { errorType = 'ref_duplicate'; ok = false; }\nelse if (status === 401) { errorType = 'unauthorized'; ok = false; }\nelse if (status === 404) { errorType = 'not_found'; ok = false; }\nelse if (status === 422) { errorType = 'validation'; ok = false; }\nelse if (status === 503) { errorType = 'unavailable'; ok = false; }\nelse if (status >= 400) { errorType = 'http_error'; ok = false; }\nreturn { ok, statusCode: status, data: body, errorType };"
       },
+      "id": "4a5a7d1d-9325-4f15-bd36-edc13381bdde",
+      "name": "Normalize Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
       "notes": "statusCode+body → contrato { ok, errorType }. Sin errores silenciosos: cada fallo queda tipado."
     },
     {
+      "parameters": {
+        "content": "### Superlikers: Request (núcleo Open/Closed)\nIN: endpoint, method, body(object) · OUT: { ok, statusCode, data, errorType }\nAuth Bearer · timeout 10s · retry 3x · normaliza errores de la API.",
+        "height": 248,
+        "width": 300,
+        "color": 4
+      },
       "id": "65501eac-61b2-4db3-b926-1f032fcb277e",
       "name": "Sticky Note 220d1c54",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [-50, -50],
-      "parameters": {
-        "content": "### Superlikers: Request (núcleo Open/Closed)\nIN: endpoint, method, body(object) · OUT: { ok, statusCode, data, errorType }\nAuth Bearer · timeout 10s · retry 3x · normaliza errores de la API.",
-        "color": 4,
-        "width": 300,
-        "height": 200
-      }
+      "position": [
+        -240,
+        -160
+      ]
     }
   ],
   "connections": {
-    "When Called: endpoint+body": {"main": [[{"node": "Call Superlikers API", "type": "main", "index": 0}]]},
-    "Call Superlikers API": {"main": [
-      [{"node": "Normalize Response", "type": "main", "index": 0}],
-      [{"node": "Normalize Timeout/Network", "type": "main", "index": 0}]
-    ]}
+    "When Called: endpoint+body": {
+      "main": [
+        [
+          {
+            "node": "Call Superlikers API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Superlikers API": {
+      "main": [
+        [
+          {
+            "node": "Normalize Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Normalize Timeout/Network",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "settings": {
     "executionOrder": "v1",
-    "availableInMCP": true
+    "availableInMCP": true,
+    "binaryMode": "separate"
   },
-  "pinData": {},
-  "meta": {
-    "instanceId": "superlikers-wa-bot"
-  }
+  "pinData": {}
 }

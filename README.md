@@ -70,7 +70,11 @@ Los **IDs de credencial** de n8n son referencias (no secretos) y pueden vivir en
 
 - **Fixtures**: [`fixtures/`](fixtures/) trae `invoice-legible.png` (factura válida, `FAC-3Z-000142`) e `invoice-illegible.png` (no‑factura → `legible:false`), más el generador reproducible.
 - **Casos**: los 4 del reto (usuario nuevo, usuario existente, factura ilegible, duplicado) + edge cases, en [`docs/test-cases.md`](docs/test-cases.md).
-- **Ejecuciones reales** (con IDs y salidas redactadas): [`docs/executions.md`](docs/executions.md).
+- **Ejecuciones reales** (con IDs y salidas redactadas): [`docs/executions.md`](docs/executions.md). Incluye las **pruebas e2e contra los endpoints reales de Superlikers** (no pin data), que destaparon 4 bugs que la simulación no podía ver.
+
+| ![Factura legible — GPT‑4.1 la leyó como `FAC-3Z-000142`](fixtures/invoice-legible.png) | ![No‑factura / selfie — GPT‑4.1 devolvió `legible:false`](fixtures/invoice-illegible.png) |
+|:---:|:---:|
+| **Legible** → Vision devuelve `legible:true` + `ref` + productos | **Ilegible** → Vision devuelve `legible:false`, `reason:no_factura` |
 
 ## Mejoras y valor agregado
 

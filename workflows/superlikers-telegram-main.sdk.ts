@@ -345,7 +345,7 @@ const searchParticipant = node({
         mappingMode: 'defineBelow',
         value: {
           endpoint: 'participants/search',
-          method: 'POST',
+          method: 'GET',
           body: expr("={{ { campaign: '3z', query: { cellphone: $('Resolve Context').item.json.typedPhone } } }}"),
         },
         schema: [
@@ -607,7 +607,7 @@ const registerParticipant = node({
         value: {
           endpoint: 'participants',
           method: 'POST',
-          body: expr("={{ { campaign: '3z', properties: { name: $('Resolve Context').item.json.name, email: $('Resolve Context').item.json.email, celular: $('Resolve Context').item.json.phone }, active: true, verified_cellphone: true, not_send_verify_registration: true } }}"),
+          body: expr("={{ { campaign: '3z', tags: ['qa-telegram'], properties: { name: $('Resolve Context').item.json.name, email: $('Resolve Context').item.json.email, celular: $('Resolve Context').item.json.phone, cedula: '1098765432', Ocupacion: 'Automatizacion', ocupacion: 'Automatizacion' }, active: true, verified_cellphone: true, not_send_verify_registration: true } }}"),
         },
         schema: [
           { id: 'endpoint', displayName: 'endpoint', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false },
