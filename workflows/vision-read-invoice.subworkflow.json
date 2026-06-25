@@ -62,7 +62,7 @@
         "mode": "runOnceForEachItem",
         "jsCode": "const ACCEPTED = 'foto clara de ticket o factura (JPG o PNG)';\nlet raw = $json.content ?? $json.choices?.[0]?.message?.content ?? $json.message?.content ?? $json.text ?? '';\nraw = String(raw).trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();\nlet out = { legible: false, ref: '', products: [], detected_type: 'desconocido', reason: 'no_json', accepted_type: ACCEPTED };\ntry {\n  const p = JSON.parse(raw);\n  const okShape = p && p.legible === true && typeof p.ref === 'string' && p.ref.trim() !== '' && Array.isArray(p.products) && p.products.length > 0;\n  if (okShape) {\n    out = { legible: true, ref: p.ref.trim(), products: p.products, detected_type: p.detected_type || 'factura', reason: 'ok', accepted_type: ACCEPTED };\n  } else {\n    out = { legible: false, ref: (p && p.ref) || '', products: (p && p.products) || [], detected_type: (p && p.detected_type) || 'desconocido', reason: (p && p.reason) || (p && p.legible === false ? 'no_factura' : 'campos_faltantes'), accepted_type: ACCEPTED };\n  }\n} catch (e) {}\nreturn out;"
       },
-      "notes": "Blindaje sin error silencioso: cualquier no-JSON -> legible:false/reason:no_json. legible:false es senal explicita. detected_type alimenta el mensaje de WhatsApp."
+      "notes": "Blindaje sin error silencioso: cualquier no-JSON -> legible:false/reason:no_json. legible:false es senal explicita. detected_type alimenta el mensaje de Telegram."
     },
     {
       "id": "cb682d6a-b471-4c1c-b846-1cff8e5b7706",

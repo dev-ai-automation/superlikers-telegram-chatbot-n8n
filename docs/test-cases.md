@@ -10,9 +10,11 @@ Las 4 pruebas obligatorias del reto, mapeadas a la FSM. Cada una debe ser **repr
 | 2 | "Juan Pérez" | `name` | guarda nombre → pide email |
 | 3 | "juan@mail.com" | `email` | valida → muestra resumen → pide confirmación |
 | 4 | "SÍ" | `confirm` | `participants` (registra activo+verificado) → pide foto |
-| 5 | foto de factura legible | `photo` | `photos` → Vision (legible) → `retail/buy` → `entries/accept` → "🎉 ganaste N puntos" |
+| 5 | foto de factura legible (al chat del bot) | `photo` | `photos` → Vision (legible) → `retail/buy` → `entries/accept` → "🎉 ganaste N puntos" |
 
 **Verificar**: fila en `wa_superlikers_sessions` con `status=completed`; fila en el log de transacciones.
+
+> Imágenes de prueba en `fixtures/`: `invoice-legible.png` (factura clara) e `invoice-illegible.png` (selfie/borrosa). Mandalas al chat del bot de Telegram.
 
 ## Prueba 2 — Usuario existente (salta registro)
 
@@ -48,4 +50,4 @@ Las 4 pruebas obligatorias del reto, mapeadas a la FSM. Cada una debe ser **repr
 
 ## Cómo ejecutar (sin tráfico real)
 
-Con el MCP de n8n: `prepare_test_pin_data` + `test_workflow` pinpean el webhook/Twilio/HTTP con data simulada. Los Code/IF/Switch corren de verdad. Para el inbound de Twilio, simular el body form: `{ From: "whatsapp:+573001234567", Body: "3001234567", NumMedia: "0" }`.
+Con el MCP de n8n: `prepare_test_pin_data` + `test_workflow` pinpean el Telegram Trigger / HTTP con data simulada. Los Code/IF/Switch corren de verdad. Para el inbound de Telegram, simular el update: `{ message: { chat: { id: 573001234567 }, text: "3001234567" } }` (para foto, agregar `photo: [{ file_id: "..." }]` y omitir `text`).

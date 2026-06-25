@@ -2,7 +2,7 @@
 
 ## Visión de una línea
 
-Chatbot de WhatsApp (Twilio) que registra participantes y carga tickets de la campaña Superlikers `3z` (entorno *labs*), orquestado en **n8n** como **máquina de estados determinista** con IA solo en los dos puntos donde aporta valor irremplazable.
+Chatbot de Telegram (Bot API) que registra participantes y carga tickets de la campaña Superlikers `3z` (entorno *labs*), orquestado en **n8n** como **máquina de estados determinista** con IA solo en los dos puntos donde aporta valor irremplazable.
 
 ## Por qué una FSM determinista (y no un único agente)
 
@@ -11,11 +11,12 @@ El control del diálogo NO lo decide un LLM. Un `Switch` sobre `currentStep` pro
 ## Diagrama de flujo (workflow principal)
 
 ```
-WhatsApp (Twilio)
+Telegram (Bot API)
   │
   ▼
-[Webhook] → [📥 Log Incoming Event] → [Normalize Twilio Input] → [Respond 200]
-  │            (raw payload, size-capped, ANTES de parsear)        (cierra Twilio)
+[Telegram Trigger] → [📥 Log Incoming Event] → [Normalize Telegram Input]
+  │  (gestiona webhook        (raw payload, size-capped,      (chat.id, text||caption,
+  │   + ACK 200 solo)          ANTES de parsear)               photo[último].file_id)
   ▼
 [Get Session] → [Resolve Context] → [Route by State]  ← FSM (Switch)
                                           │
@@ -28,7 +29,7 @@ WhatsApp (Twilio)
   └──────────────┴───────────────┴───────────────┴──────────────┘
                                           │
                                           ▼
-              [Persist Session] → [Log Transaction] → [Twilio Reply]
+              [Persist Session] → [Log Transaction] → [Send Telegram Reply]
                                                           │
                                           (status awaiting_photo) → [Wait 5min] → recordatorio
 ```
@@ -51,19 +52,19 @@ WhatsApp (Twilio)
 | `Superlikers: Request` | sub-workflow | **Open/Closed**: 1 llamada JSON a la API con Bearer + timeout + retry + onError + **normalización de errores**. Nuevos endpoints = nuevos parámetros, cero código nuevo. |
 | `Vision: Read Invoice` | sub-workflow | Único punto LLM de visión: compress 1024 → GPT‑4.1 → parseo seguro. Reemplazable (OpenAI↔Gemini) sin tocar al caller. |
 | `Conversation: Understand` | sub-workflow | NLU acotado: Guardrails (OWASP) + AI Agent + Structured Output Parser (autoFix). |
-| `WhatsApp Ticket Bot (3z)` | workflow | Orquestador FSM (narrador lineal legible). |
+| `Telegram Ticket Bot (3z)` | workflow | Orquestador FSM (narrador lineal legible). |
 | `Retry Queue Worker` | workflow | CRON 2h: reintenta ops idempotentes fallidas por timeout/503 + Slack. |
 
 ## Persistencia
 
 | Data Table | Rol |
 |---|---|
-| `wa_superlikers_sessions` | Estado FSM por celular (lookup/upsert por `phone`). `updatedAt` automático = última interacción. |
+| `wa_superlikers_sessions` | Estado FSM por chat de Telegram (lookup/upsert por `chatId`). La columna `phone` se conserva como **dato de negocio**: el celular que el usuario tipea (`participants/search`). `updatedAt` automático = última interacción. |
 | `wa_superlikers_retry_queue` | Cola de reintentos diferidos. Solo ops idempotentes (timeout/503). Disciplina < 500 filas. |
 
 ## Decisiones clave
 
-- **Auth**: Bearer header (NO `api_key` en el body — mala práctica verificada). Ver [ADR‑0001 implícito en environment.md].
-- **Media**: se descarga el binario de Twilio (`MediaUrl0` con Basic auth) y se sube **multipart** a `/photos`. El `image_url` no sirve (la URL de Twilio expira y pide auth). Ver `decisions/0002-download-binary-vs-image-url.md`.
-- **Inbound**: `Webhook` + `Respond to Webhook`, no `Twilio Trigger`. Ver `decisions/0001-webhook-vs-twilio-trigger.md`.
-- **Observabilidad de ingress**: el webhook loguea el payload crudo (size-capped) ANTES de parsear — los mismatches de forma se ven al instante.
+- **Auth**: Bearer header a Superlikers (NO `api_key` en el body — mala práctica verificada). El acceso a la Bot API de Telegram va con la credencial `telegramApi` (bot token). Ver [ADR‑0001 implícito en environment.md].
+- **Media**: se resuelve el `file_id` con `getFile` y se descarga el binario vía `Download Telegram Media` (`telegram` `file/get`, `download:true`), luego se sube **multipart** a `/photos`. Sigue siendo descarga de binario (no `image_url`): el archivo de Telegram no es una URL pública persistente y el mismo binario alimenta a `Vision`. Ver `decisions/0002-download-binary-vs-image-url.md`.
+- **Inbound**: `Telegram Trigger` nativo (gestiona webhook + ACK 200), no un `Webhook` genérico + `Respond to Webhook`. Ver `decisions/0001-webhook-vs-twilio-trigger.md`.
+- **Observabilidad de ingress**: el trigger loguea el payload crudo (size-capped) ANTES de parsear — los mismatches de forma se ven al instante.

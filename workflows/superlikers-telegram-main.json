@@ -1,0 +1,709 @@
+{
+  "name": "Superlikers: Telegram Ticket Bot (3z)",
+  "nodes": [
+    {
+      "id": "f6d44690-71ec-40cc-b126-beab76cedb5d",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.3,
+      "position": [0, 400],
+      "parameters": { "updates": ["message"], "additionalFields": {} },
+      "webhookId": "468be95c-0963-4e6b-bc0b-460303a1572d"
+    },
+    {
+      "id": "1fe14a08-874c-4af0-aa19-87b1bb367d58",
+      "name": "Log Incoming Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 400],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const raw = JSON.stringify($json).slice(0, 2000);\nconsole.log('[INGRESS superlikers-tg]', raw);\nreturn $json;"
+      }
+    },
+    {
+      "id": "15336c14-d59e-46f3-9b81-59cd20573784",
+      "name": "Normalize Telegram Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 400],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const m = $json.message || {};\nconst photos = Array.isArray(m.photo) ? m.photo : [];\nconst best = photos.length ? photos[photos.length - 1] : null;\nreturn {\n  chatId: m.chat ? String(m.chat.id) : '',\n  text: m.text || m.caption || '',\n  hasMedia: !!best,\n  fileId: best ? best.file_id : '',\n  mediaType: best ? 'image' : ''\n};"
+      }
+    },
+    {
+      "id": "233ba446-5389-44ed-85ed-42657c8d9259",
+      "name": "Get Session",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [660, 400],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": { "__rl": true, "mode": "id", "value": "AsmN5sq4Pop0FVCi" },
+        "matchType": "allConditions",
+        "filters": { "conditions": [{ "keyName": "chatId", "condition": "eq", "keyValue": "={{ $('Normalize Telegram Input').item.json.chatId }}" }] },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "730a7791-3619-4000-b52f-55e6292b9fd1",
+      "name": "Resolve Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 400],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const sess = $json && $json.chatId ? $json : {};\nconst inp = $('Normalize Telegram Input').item.json;\nconst currentStep = Number(sess.currentStep || 1);\nconst stepMap = { 1: 'phone', 3: 'name', 4: 'email', 5: 'confirm', 6: 'photo', 9: 'done' };\nlet state = stepMap[currentStep] || 'phone';\nif (state === 'done' && inp.hasMedia) state = 'photo';\nreturn {\n  chatId: inp.chatId,\n  text: inp.text,\n  typedPhone: String(inp.text || '').replace(/\\D/g, ''),\n  hasMedia: inp.hasMedia,\n  fileId: inp.fileId,\n  currentStep,\n  state,\n  phone: sess.phone || '',\n  distinctId: sess.distinctId || '',\n  name: sess.name || '',\n  email: sess.email || '',\n  photoActivityId: sess.photoActivityId || ''\n};"
+      }
+    },
+    {
+      "id": "608c7250-3c96-476c-ac65-a4f21d47c498",
+      "name": "Route by State",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [1100, 400],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            { "renameOutput": true, "outputKey": "phone", "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.state }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "phone" }], "combinator": "and" } },
+            { "renameOutput": true, "outputKey": "name", "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.state }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "name" }], "combinator": "and" } },
+            { "renameOutput": true, "outputKey": "email", "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.state }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "email" }], "combinator": "and" } },
+            { "renameOutput": true, "outputKey": "confirm", "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.state }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "confirm" }], "combinator": "and" } },
+            { "renameOutput": true, "outputKey": "photo", "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.state }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "photo" }], "combinator": "and" } }
+          ]
+        },
+        "options": { "fallbackOutput": "extra", "renameFallbackOutput": "default" }
+      }
+    },
+    {
+      "id": "81d49182-ae04-4674-9a11-3014bef5b146",
+      "name": "Is Phone Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [1600, 0],
+      "parameters": { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.typedPhone }}", "operator": { "type": "string", "operation": "regex" }, "rightValue": "^\\d{10,13}$" }], "combinator": "and" } }
+    },
+    {
+      "id": "f3cdbb36-2872-43f5-b7f1-9114ae036d97",
+      "name": "Search Participant",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [1820, -100],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "iMWPZE5gVhbc4Sge" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": { "endpoint": "participants/search", "method": "POST", "body": "={{ { campaign: '3z', query: { cellphone: $('Resolve Context').item.json.typedPhone } } }}" },
+          "schema": [
+            { "id": "endpoint", "displayName": "endpoint", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "method", "displayName": "method", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "body", "displayName": "body", "required": false, "defaultMatch": false, "display": true, "type": "object", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": { "waitForSubWorkflow": true }
+      }
+    },
+    {
+      "id": "a70baa50-a7fc-4c06-8d9b-ab1bf38922e0",
+      "name": "Decide After Search",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2040, -100],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const ctx = $('Resolve Context').item.json;\nconst res = $json || {};\nconst data = res.data || {};\nconst list = data.participants || data.results || (Array.isArray(data) ? data : []);\nconst found = list && list.length ? list[0] : null;\nconst typedPhone = ctx.typedPhone || '';\nif (found && (found.email || found.distinct_id)) {\n  return {\n    chatId: ctx.chatId, phone: typedPhone,\n    nextStep: 6,\n    distinctId: found.email || found.distinct_id,\n    name: found.name || ctx.name || '',\n    email: found.email || '',\n    photoActivityId: '', invoiceRef: '',\n    replyText: '¡Te encontré! 📸 Mandame la foto de tu ticket o factura.',\n    status: 'awaiting_photo'\n  };\n}\nreturn {\n  chatId: ctx.chatId, phone: typedPhone,\n  nextStep: 3,\n  distinctId: '', name: ctx.name || '', email: '', photoActivityId: '', invoiceRef: '',\n  replyText: '¡Hola! Para registrarte, ¿cuál es tu nombre completo?',\n  status: 'awaiting_name'\n};"
+      }
+    },
+    {
+      "id": "014f02d4-d012-4215-a58e-d17a7e8d0d2e",
+      "name": "Persist Session",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [2860, 400],
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": { "__rl": true, "mode": "id", "value": "AsmN5sq4Pop0FVCi" },
+        "matchType": "allConditions",
+        "filters": { "conditions": [{ "keyName": "chatId", "condition": "eq", "keyValue": "={{ $json.chatId }}" }] },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": { "chatId": "={{ $json.chatId }}", "phone": "={{ $json.phone }}", "currentStep": "={{ $json.nextStep }}", "distinctId": "={{ $json.distinctId }}", "name": "={{ $json.name }}", "email": "={{ $json.email }}", "photoActivityId": "={{ $json.photoActivityId }}", "invoiceRef": "={{ $json.invoiceRef }}", "status": "={{ $json.status }}" },
+          "matchingColumns": ["chatId"],
+          "schema": [
+            { "id": "chatId", "displayName": "chatId", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "phone", "displayName": "phone", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "currentStep", "displayName": "currentStep", "required": false, "defaultMatch": false, "display": true, "type": "number", "canBeUsedToMatch": false },
+            { "id": "distinctId", "displayName": "distinctId", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "name", "displayName": "name", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "email", "displayName": "email", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "photoActivityId", "displayName": "photoActivityId", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "invoiceRef", "displayName": "invoiceRef", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "status", "displayName": "status", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1b3d8e6c-528f-434f-99ae-1018d53e1d47",
+      "name": "Ask Phone Again",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1820, 120],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const ctx = $('Resolve Context').item.json;\nreturn {\n  chatId: ctx.chatId, phone: ctx.phone,\n  nextStep: 1, distinctId: ctx.distinctId, name: ctx.name, email: ctx.email,\n  photoActivityId: ctx.photoActivityId, invoiceRef: '',\n  replyText: 'Pasame tu número de celular (solo números, 10 dígitos) 📱',\n  status: 'awaiting_phone'\n};"
+      }
+    },
+    {
+      "id": "a36a3308-2ad2-4db5-8af5-e37c4fbaa810",
+      "name": "Capture Name",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1600, 300],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const ctx = $('Resolve Context').item.json;\nconst text = (ctx.text || '').trim();\nif (text) {\n  return {\n    chatId: ctx.chatId, phone: ctx.phone,\n    nextStep: 4, distinctId: ctx.distinctId, name: text, email: ctx.email,\n    photoActivityId: ctx.photoActivityId, invoiceRef: '',\n    replyText: '¡Gracias! Ahora tu correo electrónico ✉️',\n    status: 'awaiting_email'\n  };\n}\nreturn {\n  chatId: ctx.chatId, phone: ctx.phone,\n  nextStep: 3, distinctId: ctx.distinctId, name: ctx.name, email: ctx.email,\n  photoActivityId: ctx.photoActivityId, invoiceRef: '',\n  replyText: 'No te entendí. ¿Cuál es tu nombre completo?',\n  status: 'awaiting_name'\n};"
+      }
+    },
+    {
+      "id": "b7f40f24-bdc0-48ff-82fd-a91f6a72b649",
+      "name": "Is Email Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [1600, 560],
+      "parameters": { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.text }}", "operator": { "type": "string", "operation": "regex" }, "rightValue": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$" }], "combinator": "and" } }
+    },
+    {
+      "id": "9f86eff0-3b62-4ff7-8fd7-8ba18f87108c",
+      "name": "Save Email & Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1820, 460],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const ctx = $('Resolve Context').item.json;\nconst email = (ctx.text || '').trim().toLowerCase();\nreturn {\n  chatId: ctx.chatId, phone: ctx.phone,\n  nextStep: 5, distinctId: email, name: ctx.name, email: email,\n  photoActivityId: ctx.photoActivityId, invoiceRef: '',\n  replyText: 'Confirmemos: Nombre ' + ctx.name + ', Cel ' + ctx.phone + ', Correo ' + email + '. ¿Es correcto? Respondé SÍ para continuar.',\n  status: 'awaiting_confirm'\n};"
+      }
+    },
+    {
+      "id": "f303e2cd-df0d-43f1-9ff0-f54f82c17332",
+      "name": "Ask Email Again",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1820, 660],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const ctx = $('Resolve Context').item.json;\nreturn {\n  chatId: ctx.chatId, phone: ctx.phone,\n  nextStep: 4, distinctId: ctx.distinctId, name: ctx.name, email: ctx.email,\n  photoActivityId: ctx.photoActivityId, invoiceRef: '',\n  replyText: 'Ese correo no parece válido. Mandámelo de nuevo ✉️',\n  status: 'awaiting_email'\n};"
+      }
+    },
+    {
+      "id": "f5b9d96e-8578-4ab2-b0ff-6278d0feb2a6",
+      "name": "Understand Confirmation",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [1600, 820],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "EI6Ax3aTtjVGRwAp" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": { "expecting": "confirmacion", "userText": "={{ $('Resolve Context').item.json.text }}" },
+          "schema": [
+            { "id": "expecting", "displayName": "expecting", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "userText", "displayName": "userText", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": { "waitForSubWorkflow": true }
+      }
+    },
+    {
+      "id": "b26e2ec1-11cc-4c67-937a-19a5c8373a7c",
+      "name": "Route Confirm Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [1820, 820],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            { "renameOutput": true, "outputKey": "avanzar", "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.next_action }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "avanzar" }], "combinator": "and" } },
+            { "renameOutput": true, "outputKey": "cancelar", "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.next_action }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "cancelar" }], "combinator": "and" } }
+          ]
+        },
+        "options": { "fallbackOutput": "extra", "renameFallbackOutput": "reintentar" }
+      }
+    },
+    {
+      "id": "6ed4917d-c8a2-4dd9-a410-dadfbc8e1684",
+      "name": "Register Participant",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [2040, 720],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "iMWPZE5gVhbc4Sge" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": { "endpoint": "participants", "method": "POST", "body": "={{ { campaign: '3z', properties: { name: $('Resolve Context').item.json.name, email: $('Resolve Context').item.json.email, celular: $('Resolve Context').item.json.phone }, active: true, verified_cellphone: true, not_send_verify_registration: true } }}" },
+          "schema": [
+            { "id": "endpoint", "displayName": "endpoint", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "method", "displayName": "method", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "body", "displayName": "body", "required": false, "defaultMatch": false, "display": true, "type": "object", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": { "waitForSubWorkflow": true }
+      }
+    },
+    {
+      "id": "467bbd5b-5f4b-4d6f-84f9-79fc7d55d271",
+      "name": "After Register",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2260, 720],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const ctx = $('Resolve Context').item.json;\nreturn {\n  chatId: ctx.chatId, phone: ctx.phone,\n  nextStep: 6, distinctId: ctx.email, name: ctx.name, email: ctx.email,\n  photoActivityId: '', invoiceRef: '',\n  replyText: '¡Listo, quedaste registrado! 📸 Mandame la foto de tu ticket.',\n  status: 'awaiting_photo'\n};"
+      }
+    },
+    {
+      "id": "c8841925-73aa-4782-be5a-706b4e7f25a2",
+      "name": "Cancel Confirm",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2040, 900],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const ctx = $('Resolve Context').item.json;\nreturn {\n  chatId: ctx.chatId, phone: ctx.phone,\n  nextStep: 3, distinctId: '', name: '', email: '',\n  photoActivityId: '', invoiceRef: '',\n  replyText: 'Sin problema, empecemos de nuevo. ¿Tu nombre?',\n  status: 'awaiting_name'\n};"
+      }
+    },
+    {
+      "id": "f6764091-c5f7-4ae4-89f0-b924192fa374",
+      "name": "Retry Confirm",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2040, 1080],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const ctx = $('Resolve Context').item.json;\nconst reply = $json.reply_text || 'No te entendí. Respondé SÍ para confirmar o NO para corregir.';\nreturn {\n  chatId: ctx.chatId, phone: ctx.phone,\n  nextStep: 5, distinctId: ctx.distinctId, name: ctx.name, email: ctx.email,\n  photoActivityId: ctx.photoActivityId, invoiceRef: '',\n  replyText: reply,\n  status: 'awaiting_confirm'\n};"
+      }
+    },
+    {
+      "id": "0f7b1128-14cc-4186-992e-6f9a11688fa1",
+      "name": "Has Media?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [1600, 1300],
+      "parameters": { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "leftValue": "={{ $json.hasMedia }}", "operator": { "type": "boolean", "operation": "true" } }], "combinator": "and" } }
+    },
+    {
+      "id": "396aac2a-fd20-4bc4-9981-752ee5f5cf58",
+      "name": "Download Telegram Media",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1820, 1200],
+      "parameters": { "resource": "file", "operation": "get", "fileId": "={{ $('Resolve Context').item.json.fileId }}", "download": true },
+      "onError": "continueErrorOutput",
+      "webhookId": "e72a481b-5dac-4b43-8677-9234a41e3d11"
+    },
+    {
+      "id": "0e6aa55b-5805-4cc3-ad8a-f2e0085b8246",
+      "name": "Upload Photo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [2040, 1100],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.BASE_URL || \"https://api.superlikerslabs.com/v1\" }}/photos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "campaign", "value": "3z" },
+            { "name": "distinct_id", "value": "={{ $('Resolve Context').item.json.distinctId }}" },
+            { "name": "title", "value": "Ticket de compra" },
+            { "name": "category", "value": "tickets" },
+            { "parameterType": "formBinaryData", "name": "upload_photo", "inputDataFieldName": "data" }
+          ]
+        },
+        "options": { "timeout": 10000, "response": { "response": { "fullResponse": true, "neverError": true } } }
+      }
+    },
+    {
+      "id": "560752f7-3402-46de-903f-ecf59d680ceb",
+      "name": "Merge Photo Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [2280, 1200],
+      "parameters": { "mode": "combine", "combineBy": "combineByPosition", "numberInputs": 2 }
+    },
+    {
+      "id": "b524dbbf-6738-48bf-88d1-13179b59e534",
+      "name": "Read Invoice (Vision)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [2040, 1300],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "VeL0Lewf2pIojSsm" },
+        "workflowInputs": { "mappingMode": "passthrough" },
+        "options": { "waitForSubWorkflow": true }
+      }
+    },
+    {
+      "id": "5eee899e-52c7-42e1-9795-aa2959ce3267",
+      "name": "Download Failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2040, 1420],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const ctx = $('Resolve Context').item.json;\nreturn {\n  chatId: ctx.chatId, phone: ctx.phone,\n  nextStep: 6, distinctId: ctx.distinctId, name: ctx.name, email: ctx.email,\n  photoActivityId: ctx.photoActivityId, invoiceRef: '',\n  replyText: 'No pude descargar tu foto, reintentá 📷',\n  status: 'awaiting_photo'\n};"
+      }
+    },
+    {
+      "id": "27af9679-95b9-497c-b14c-719779603cca",
+      "name": "Remind Photo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1820, 1420],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const ctx = $('Resolve Context').item.json;\nreturn {\n  chatId: ctx.chatId, phone: ctx.phone,\n  nextStep: 6, distinctId: ctx.distinctId, name: ctx.name, email: ctx.email,\n  photoActivityId: ctx.photoActivityId, invoiceRef: '',\n  replyText: 'Necesito la *foto* de tu ticket 📸 (no texto).',\n  status: 'awaiting_photo'\n};"
+      }
+    },
+    {
+      "id": "aa5a2136-fb16-4932-94ae-825f3779f6a2",
+      "name": "Default To Phone",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1820, 240],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const ctx = $('Resolve Context').item.json;\nreturn {\n  chatId: ctx.chatId, phone: ctx.phone,\n  nextStep: 1, distinctId: ctx.distinctId, name: ctx.name, email: ctx.email,\n  photoActivityId: ctx.photoActivityId, invoiceRef: '',\n  replyText: '¡Hola! Para empezar, pasame tu número de celular (10 dígitos) 📱',\n  status: 'awaiting_phone'\n};"
+      }
+    },
+    {
+      "id": "9abee887-2bb8-46b1-b20b-571bb8aef363",
+      "name": "Combine & Decide",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2500, 1200],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const up = $('Upload Photo').item.json; const upBody = up.body || up;\nconst upStr = JSON.stringify(upBody || {}).toLowerCase();\nconst sha1Taken = upStr.includes('sha1 is already taken');\nconst activityId = (upBody && (upBody.id || (upBody.activity && upBody.activity.id) || upBody.entry)) || '';\nconst v = $('Read Invoice (Vision)').item.json;\nconst ctx = $('Resolve Context').item.json;\nreturn { chatId: ctx.chatId, phone: ctx.phone, distinctId: ctx.distinctId, name: ctx.name, email: ctx.email, sha1Taken, activityId, legible: !!v.legible, ref: v.ref || '', products: v.products || [], detected_type: v.detected_type || 'desconocido' };"
+      }
+    },
+    {
+      "id": "741afc5c-063f-4f16-ba3f-0f9eedc4b67e",
+      "name": "Is Ticket Duplicate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [2720, 1200],
+      "parameters": { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "leftValue": "={{ $json.sha1Taken }}", "operator": { "type": "boolean", "operation": "true" } }], "combinator": "and" } }
+    },
+    {
+      "id": "4242f6fd-073b-44e6-98a6-4ded636ac932",
+      "name": "Duplicate Ticket Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2940, 1320],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const d = $('Combine & Decide').item.json;\nreturn {\n  chatId: d.chatId, phone: d.phone,\n  nextStep: 6, distinctId: d.distinctId, name: d.name, email: d.email,\n  photoActivityId: d.activityId, invoiceRef: '',\n  replyText: 'Ese ticket ya fue registrado antes ✋',\n  status: 'awaiting_photo'\n};"
+      }
+    },
+    {
+      "id": "24ceb04f-8d45-4463-8a02-80a54f84bcb1",
+      "name": "Is Legible?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [2940, 1100],
+      "parameters": { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "leftValue": "={{ $json.legible }}", "operator": { "type": "boolean", "operation": "true" } }], "combinator": "and" } }
+    },
+    {
+      "id": "bdb373bd-c014-4651-8883-eec11a983886",
+      "name": "Retail Buy",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [3160, 1000],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "iMWPZE5gVhbc4Sge" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": { "endpoint": "retail/buy", "method": "POST", "body": "={{ { campaign: '3z', distinct_id: $('Combine & Decide').item.json.distinctId, ref: $('Combine & Decide').item.json.ref, products: $('Combine & Decide').item.json.products } }}" },
+          "schema": [
+            { "id": "endpoint", "displayName": "endpoint", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "method", "displayName": "method", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "body", "displayName": "body", "required": false, "defaultMatch": false, "display": true, "type": "object", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": { "waitForSubWorkflow": true }
+      }
+    },
+    {
+      "id": "1cf55994-c1dd-4a71-a2fd-f1b90c2bde8c",
+      "name": "Route Retail Result",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [3380, 1000],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            { "renameOutput": true, "outputKey": "duplicate", "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.errorType }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "ref_duplicate" }], "combinator": "and" } },
+            { "renameOutput": true, "outputKey": "ok", "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" }, "conditions": [{ "leftValue": "={{ $json.ok }}", "operator": { "type": "boolean", "operation": "true" } }], "combinator": "and" } }
+          ]
+        },
+        "options": { "fallbackOutput": "extra", "renameFallbackOutput": "failed" }
+      }
+    },
+    {
+      "id": "90abf117-8453-4dfc-a4d0-91e0fafbe81d",
+      "name": "Ref Duplicate Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3600, 1100],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const d = $('Combine & Decide').item.json;\nreturn {\n  chatId: d.chatId, phone: d.phone,\n  nextStep: 6, distinctId: d.distinctId, name: d.name, email: d.email,\n  photoActivityId: d.activityId, invoiceRef: '',\n  replyText: 'Esa compra ya generó puntos ✋',\n  status: 'awaiting_photo'\n};"
+      }
+    },
+    {
+      "id": "f1ccde64-8fdc-48f3-8259-aea3d5c79f9a",
+      "name": "Accept Entry",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [3600, 900],
+      "parameters": {
+        "source": "database",
+        "workflowId": { "__rl": true, "mode": "id", "value": "iMWPZE5gVhbc4Sge" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": { "endpoint": "entries/accept", "method": "POST", "body": "={{ { campaign: '3z', id: $('Combine & Decide').item.json.activityId } }}" },
+          "schema": [
+            { "id": "endpoint", "displayName": "endpoint", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "method", "displayName": "method", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "body", "displayName": "body", "required": false, "defaultMatch": false, "display": true, "type": "object", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": { "waitForSubWorkflow": true }
+      }
+    },
+    {
+      "id": "ca09abac-07e4-4182-bbb9-7133e2be1367",
+      "name": "After Accept",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3820, 900],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const d = $('Combine & Decide').item.json;\nconst buy = $('Retail Buy').item.json || {};\nconst acc = $json || {};\nconst execErr = (acc.data && acc.data.execution_error) || (buy.data && buy.data.execution_error) || acc.errorType === 'execution_error' || buy.errorType === 'execution_error';\nif (execErr) {\n  return {\n    chatId: d.chatId, phone: d.phone,\n    nextStep: 9, distinctId: d.distinctId, name: d.name, email: d.email,\n    photoActivityId: d.activityId, invoiceRef: d.ref,\n    replyText: 'Tu ticket quedó en revisión manual 🕒',\n    status: 'manual_review'\n  };\n}\nconst points = (buy.data && (buy.data.points || buy.data.earned_points)) || (acc.data && acc.data.points) || '';\nreturn {\n  chatId: d.chatId, phone: d.phone,\n  nextStep: 9, distinctId: d.distinctId, name: d.name, email: d.email,\n  photoActivityId: d.activityId, invoiceRef: d.ref,\n  replyText: points ? ('🎉 ¡Listo! Ganaste ' + points + ' puntos.') : '🎉 ¡Listo! Ganaste tus puntos.',\n  status: 'completed'\n};"
+      }
+    },
+    {
+      "id": "545e1076-4b95-44cf-90d8-3c15f64433a5",
+      "name": "Retail Failed Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3600, 1280],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const d = $('Combine & Decide').item.json;\nreturn {\n  chatId: d.chatId, phone: d.phone,\n  nextStep: 6, distinctId: d.distinctId, name: d.name, email: d.email,\n  photoActivityId: d.activityId, invoiceRef: '',\n  replyText: 'Hubo un problema registrando tu compra, intentá más tarde',\n  status: 'awaiting_photo'\n};"
+      }
+    },
+    {
+      "id": "1c11a607-05b4-44d4-8c53-4ef74bcf8119",
+      "name": "Not Legible Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2940, 1480],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const d = $('Combine & Decide').item.json;\nreturn {\n  chatId: d.chatId, phone: d.phone,\n  nextStep: 6, distinctId: d.distinctId, name: d.name, email: d.email,\n  photoActivityId: '', invoiceRef: '',\n  replyText: 'Recibí un/a ' + (d.detected_type || 'documento') + ', no un ticket 📷. Mandame una foto clara de tu factura (JPG/PNG).',\n  status: 'awaiting_photo'\n};"
+      }
+    },
+    {
+      "id": "af4916d0-e2d3-4524-9bd8-c398927cc2fd",
+      "name": "Log Transaction",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3080, 400],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const rec = {\n  ts: new Date().toISOString(),\n  chatId: $json.chatId || '',\n  phone: $json.phone || '',\n  distinctId: $json.distinctId || '',\n  invoiceRef: $json.invoiceRef || '',\n  status: $json.status || '',\n  nextStep: $json.nextStep\n};\nconsole.log('[TX superlikers-tg]', JSON.stringify(rec));\nreturn $json;"
+      }
+    },
+    {
+      "id": "f78c7f25-c9cd-4ed5-9d87-a9b14a01640d",
+      "name": "Send Telegram Reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [3300, 400],
+      "parameters": { "resource": "message", "operation": "sendMessage", "chatId": "={{ $json.chatId }}", "text": "={{ $json.replyText }}", "additionalFields": { "parse_mode": "Markdown", "appendAttribution": false } },
+      "webhookId": "1bb3c00f-8057-473a-ab9d-fccaba967db2"
+    },
+    {
+      "id": "0d5f3b43-d43f-4142-aebc-bf1e22c75d09",
+      "name": "Is Awaiting Photo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [3520, 600],
+      "parameters": { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $('Persist Session').item.json.status }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "awaiting_photo" }], "combinator": "and" } }
+    },
+    {
+      "id": "15ea0d3b-fa89-4995-9174-8b966510fc4f",
+      "name": "Wait 5min",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [3740, 600],
+      "parameters": { "resume": "timeInterval", "amount": 5, "unit": "minutes" },
+      "webhookId": "486c3f85-a077-42b0-86c7-fca8d05ae1e1"
+    },
+    {
+      "id": "5d635844-d966-4fa2-b050-4fd37fc53547",
+      "name": "Get Session Again",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [3960, 600],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": { "__rl": true, "mode": "id", "value": "AsmN5sq4Pop0FVCi" },
+        "matchType": "allConditions",
+        "filters": { "conditions": [{ "keyName": "chatId", "condition": "eq", "keyValue": "={{ $('Persist Session').item.json.chatId }}" }] },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "b5ae0b1a-1afa-4954-aeae-1af4137774b7",
+      "name": "Still Awaiting Photo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [4180, 600],
+      "parameters": { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.status }}", "operator": { "type": "string", "operation": "equals" }, "rightValue": "awaiting_photo" }], "combinator": "and" } }
+    },
+    {
+      "id": "57cc8015-c246-49c9-9815-6688f668e896",
+      "name": "Send Telegram Photo Reminder",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [4400, 600],
+      "parameters": { "resource": "message", "operation": "sendMessage", "chatId": "={{ $json.chatId }}", "text": "¿Seguís ahí? Mandame la foto de tu ticket cuando puedas 📸", "additionalFields": { "appendAttribution": false } },
+      "webhookId": "77127e4b-4283-4073-a02f-9f23abacec92"
+    },
+    {
+      "id": "76ba0861-3034-4612-8b3a-daa21ffcc915",
+      "name": "Sticky Note ed684f04",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-50, 350],
+      "parameters": { "content": "## 📥 Ingress\nTelegram Trigger → log crudo → normalizar update (chatId, text, photo file_id) → cargar sesión por chatId → resolver estado FSM", "color": 4, "width": 1180, "height": 200 }
+    },
+    {
+      "id": "db189376-6b20-4569-b5eb-18480ba57454",
+      "name": "Sticky Note aa475680",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1050, 350],
+      "parameters": { "content": "## 🔀 FSM Router\nRutea por estado: phone / name / email / confirm / photo (default → phone)", "color": 3, "width": 300, "height": 200 }
+    },
+    {
+      "id": "0c62f3fb-d1e0-4c42-80c0-d3098bb074d1",
+      "name": "Sticky Note c5fd26d2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [2810, 350],
+      "parameters": { "content": "## 📤 Cola compartida\nPersistir sesión (key chatId) → log → responder por Telegram. Rama de inactividad: si sigue awaiting_photo, recordar tras 5 min.", "color": 5, "width": 740, "height": 200 }
+    },
+    {
+      "id": "9a462a17-ca0a-42d4-915a-56f2b59a42fc",
+      "name": "Sticky Note 7fc6582e",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1550, 1050],
+      "parameters": { "content": "## 🧾 Rama Foto (fan-out)\nDownload (Telegram getFile) → FAN-OUT a Upload /photos y a Vision (ambos leen el binario data) → Merge → Combine & Decide → duplicado/legible → retail/buy → entries/accept", "color": 6, "width": 1200, "height": 400 }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": { "main": [[{ "node": "Log Incoming Event", "type": "main", "index": 0 }]] },
+    "Log Incoming Event": { "main": [[{ "node": "Normalize Telegram Input", "type": "main", "index": 0 }]] },
+    "Normalize Telegram Input": { "main": [[{ "node": "Get Session", "type": "main", "index": 0 }]] },
+    "Get Session": { "main": [[{ "node": "Resolve Context", "type": "main", "index": 0 }]] },
+    "Resolve Context": { "main": [[{ "node": "Route by State", "type": "main", "index": 0 }]] },
+    "Route by State": { "main": [[{ "node": "Is Phone Valid?", "type": "main", "index": 0 }], [{ "node": "Capture Name", "type": "main", "index": 0 }], [{ "node": "Is Email Valid?", "type": "main", "index": 0 }], [{ "node": "Understand Confirmation", "type": "main", "index": 0 }], [{ "node": "Has Media?", "type": "main", "index": 0 }], [{ "node": "Default To Phone", "type": "main", "index": 0 }]] },
+    "Is Phone Valid?": { "main": [[{ "node": "Search Participant", "type": "main", "index": 0 }], [{ "node": "Ask Phone Again", "type": "main", "index": 0 }]] },
+    "Search Participant": { "main": [[{ "node": "Decide After Search", "type": "main", "index": 0 }]] },
+    "Decide After Search": { "main": [[{ "node": "Persist Session", "type": "main", "index": 0 }]] },
+    "Persist Session": { "main": [[{ "node": "Log Transaction", "type": "main", "index": 0 }]] },
+    "Ask Phone Again": { "main": [[{ "node": "Persist Session", "type": "main", "index": 0 }]] },
+    "Capture Name": { "main": [[{ "node": "Persist Session", "type": "main", "index": 0 }]] },
+    "Is Email Valid?": { "main": [[{ "node": "Save Email & Summary", "type": "main", "index": 0 }], [{ "node": "Ask Email Again", "type": "main", "index": 0 }]] },
+    "Save Email & Summary": { "main": [[{ "node": "Persist Session", "type": "main", "index": 0 }]] },
+    "Ask Email Again": { "main": [[{ "node": "Persist Session", "type": "main", "index": 0 }]] },
+    "Understand Confirmation": { "main": [[{ "node": "Route Confirm Action", "type": "main", "index": 0 }]] },
+    "Route Confirm Action": { "main": [[{ "node": "Register Participant", "type": "main", "index": 0 }], [{ "node": "Cancel Confirm", "type": "main", "index": 0 }], [{ "node": "Retry Confirm", "type": "main", "index": 0 }]] },
+    "Register Participant": { "main": [[{ "node": "After Register", "type": "main", "index": 0 }]] },
+    "After Register": { "main": [[{ "node": "Persist Session", "type": "main", "index": 0 }]] },
+    "Cancel Confirm": { "main": [[{ "node": "Persist Session", "type": "main", "index": 0 }]] },
+    "Retry Confirm": { "main": [[{ "node": "Persist Session", "type": "main", "index": 0 }]] },
+    "Has Media?": { "main": [[{ "node": "Download Telegram Media", "type": "main", "index": 0 }], [{ "node": "Remind Photo", "type": "main", "index": 0 }]] },
+    "Download Telegram Media": { "main": [[{ "node": "Upload Photo", "type": "main", "index": 0 }, { "node": "Read Invoice (Vision)", "type": "main", "index": 0 }], [{ "node": "Download Failed", "type": "main", "index": 0 }]] },
+    "Upload Photo": { "main": [[{ "node": "Merge Photo Results", "type": "main", "index": 0 }]] },
+    "Merge Photo Results": { "main": [[{ "node": "Combine & Decide", "type": "main", "index": 0 }]] },
+    "Read Invoice (Vision)": { "main": [[{ "node": "Merge Photo Results", "type": "main", "index": 1 }]] },
+    "Download Failed": { "main": [[{ "node": "Persist Session", "type": "main", "index": 0 }]] },
+    "Remind Photo": { "main": [[{ "node": "Persist Session", "type": "main", "index": 0 }]] },
+    "Default To Phone": { "main": [[{ "node": "Persist Session", "type": "main", "index": 0 }]] },
+    "Combine & Decide": { "main": [[{ "node": "Is Ticket Duplicate?", "type": "main", "index": 0 }]] },
+    "Is Ticket Duplicate?": { "main": [[{ "node": "Duplicate Ticket Reply", "type": "main", "index": 0 }], [{ "node": "Is Legible?", "type": "main", "index": 0 }]] },
+    "Duplicate Ticket Reply": { "main": [[{ "node": "Persist Session", "type": "main", "index": 0 }]] },
+    "Is Legible?": { "main": [[{ "node": "Retail Buy", "type": "main", "index": 0 }], [{ "node": "Not Legible Reply", "type": "main", "index": 0 }]] },
+    "Retail Buy": { "main": [[{ "node": "Route Retail Result", "type": "main", "index": 0 }]] },
+    "Route Retail Result": { "main": [[{ "node": "Ref Duplicate Reply", "type": "main", "index": 0 }], [{ "node": "Accept Entry", "type": "main", "index": 0 }], [{ "node": "Retail Failed Reply", "type": "main", "index": 0 }]] },
+    "Ref Duplicate Reply": { "main": [[{ "node": "Persist Session", "type": "main", "index": 0 }]] },
+    "Accept Entry": { "main": [[{ "node": "After Accept", "type": "main", "index": 0 }]] },
+    "After Accept": { "main": [[{ "node": "Persist Session", "type": "main", "index": 0 }]] },
+    "Retail Failed Reply": { "main": [[{ "node": "Persist Session", "type": "main", "index": 0 }]] },
+    "Not Legible Reply": { "main": [[{ "node": "Persist Session", "type": "main", "index": 0 }]] },
+    "Log Transaction": { "main": [[{ "node": "Send Telegram Reply", "type": "main", "index": 0 }]] },
+    "Send Telegram Reply": { "main": [[{ "node": "Is Awaiting Photo?", "type": "main", "index": 0 }]] },
+    "Is Awaiting Photo?": { "main": [[{ "node": "Wait 5min", "type": "main", "index": 0 }]] },
+    "Wait 5min": { "main": [[{ "node": "Get Session Again", "type": "main", "index": 0 }]] },
+    "Get Session Again": { "main": [[{ "node": "Still Awaiting Photo?", "type": "main", "index": 0 }]] },
+    "Still Awaiting Photo?": { "main": [[{ "node": "Send Telegram Photo Reminder", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "availableInMCP": true },
+  "pinData": {}
+}
