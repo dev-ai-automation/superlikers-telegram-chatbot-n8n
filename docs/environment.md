@@ -58,12 +58,14 @@ El MCP de n8n **no puede** bindear credenciales de auth genérica a nodos `HTTP 
 
 Instancia: https://n8n.srv1499692.hstgr.cloud · Proyecto: Dev Automation (ZBaqJyvdifxCV4uh)
 
+> **IDs recreados el 2026-06-25** (los workflows previos fueron borrados; `Superlikers: Request` se reutilizó). Ver `docs/executions.md` → "Recreación + pruebas con el chat 715690785".
+
 | Workflow | ID |
 |---|---|
-| Superlikers: Telegram Ticket Bot (3z) | 4qFhph7LKYgFqctz |
+| Superlikers: Telegram Ticket Bot (3z) | b3xPAom7g5D4fNJW |
 | Superlikers: Request | iMWPZE5gVhbc4Sge |
-| Vision: Read Invoice | VeL0Lewf2pIojSsm |
-| Conversation: Understand | EI6Ax3aTtjVGRwAp |
-| Superlikers: Retry Queue Worker | MJSCstoF7CU20JUm |
+| Vision: Read Invoice | OolJmLS6axxXNMNI |
+| Conversation: Understand | BE5HDPv8zRivQn8D |
+| Superlikers: Retry Queue Worker | z4T5TV6ibkNb0dyZ |
 
 Data Tables: wa_superlikers_sessions (AsmN5sq4Pop0FVCi), wa_superlikers_retry_queue (F7RemUCjuKZT4JBL)

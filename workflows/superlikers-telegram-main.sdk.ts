@@ -307,7 +307,7 @@ const sendPhotoReminder = node({
       resource: 'message',
       operation: 'sendMessage',
       chatId: expr('{{ $json.chatId }}'),
-      text: '¿Seguís ahí? Mandame la foto de tu ticket cuando puedas 📸',
+      text: '¿Sigues ahí? Envíame la foto de tu ticket cuando puedas 📸',
       additionalFields: { appendAttribution: false },
     },
     position: [4400, 600],
@@ -384,7 +384,7 @@ const decideAfterSearch = node({
         "    name: found.name || ctx.name || '',\n" +
         "    email: found.email || '',\n" +
         "    photoActivityId: '', invoiceRef: '',\n" +
-        "    replyText: '¡Te encontré! 📸 Mandame la foto de tu ticket o factura.',\n" +
+        "    replyText: '¡Te encontré! 📸 Envíame la foto de tu ticket o factura.',\n" +
         "    status: 'awaiting_photo'\n" +
         "  };\n" +
         "}\n" +
@@ -415,7 +415,7 @@ const askPhoneAgain = node({
         "  chatId: ctx.chatId, phone: ctx.phone,\n" +
         "  nextStep: 1, distinctId: ctx.distinctId, name: ctx.name, email: ctx.email,\n" +
         "  photoActivityId: ctx.photoActivityId, invoiceRef: '',\n" +
-        "  replyText: 'Pasame tu número de celular (solo números, 10 dígitos) 📱',\n" +
+        "  replyText: 'Escríbeme tu número de celular (solo números, 10 dígitos) 📱',\n" +
         "  status: 'awaiting_phone'\n" +
         "};",
     },
@@ -438,7 +438,7 @@ const defaultToPhone = node({
         "  chatId: ctx.chatId, phone: ctx.phone,\n" +
         "  nextStep: 1, distinctId: ctx.distinctId, name: ctx.name, email: ctx.email,\n" +
         "  photoActivityId: ctx.photoActivityId, invoiceRef: '',\n" +
-        "  replyText: '¡Hola! Para empezar, pasame tu número de celular (10 dígitos) 📱',\n" +
+        "  replyText: '¡Hola! Para empezar, escríbeme tu número de celular (10 dígitos) 📱',\n" +
         "  status: 'awaiting_phone'\n" +
         "};",
     },
@@ -515,7 +515,7 @@ const saveEmailSummary = node({
         "  chatId: ctx.chatId, phone: ctx.phone,\n" +
         "  nextStep: 5, distinctId: email, name: ctx.name, email: email,\n" +
         "  photoActivityId: ctx.photoActivityId, invoiceRef: '',\n" +
-        "  replyText: 'Confirmemos: Nombre ' + ctx.name + ', Cel ' + ctx.phone + ', Correo ' + email + '. ¿Es correcto? Respondé SÍ para continuar.',\n" +
+        "  replyText: 'Confirmemos: Nombre ' + ctx.name + ', Cel ' + ctx.phone + ', Correo ' + email + '. ¿Es correcto? Responde SÍ para continuar.',\n" +
         "  status: 'awaiting_confirm'\n" +
         "};",
     },
@@ -538,7 +538,7 @@ const askEmailAgain = node({
         "  chatId: ctx.chatId, phone: ctx.phone,\n" +
         "  nextStep: 4, distinctId: ctx.distinctId, name: ctx.name, email: ctx.email,\n" +
         "  photoActivityId: ctx.photoActivityId, invoiceRef: '',\n" +
-        "  replyText: 'Ese correo no parece válido. Mandámelo de nuevo ✉️',\n" +
+        "  replyText: 'Ese correo no parece válido. Envíamelo de nuevo ✉️',\n" +
         "  status: 'awaiting_email'\n" +
         "};",
     },
@@ -556,7 +556,7 @@ const understandConfirm = node({
     name: 'Understand Confirmation',
     parameters: {
       source: 'database',
-      workflowId: { __rl: true, mode: 'id', value: 'EI6Ax3aTtjVGRwAp' },
+      workflowId: { __rl: true, mode: 'id', value: 'BE5HDPv8zRivQn8D' },
       workflowInputs: {
         mappingMode: 'defineBelow',
         value: {
@@ -632,11 +632,21 @@ const afterRegister = node({
       language: 'javaScript',
       jsCode:
         "const ctx = $('Resolve Context').item.json;\n" +
+        "const reg = $('Register Participant').item.json || {};\n" +
+        "if (reg.ok === false) {\n" +
+        "  return {\n" +
+        "    chatId: ctx.chatId, phone: ctx.phone,\n" +
+        "    nextStep: 9, distinctId: ctx.email, name: ctx.name, email: ctx.email,\n" +
+        "    photoActivityId: '', invoiceRef: '',\n" +
+        "    replyText: 'No pude completar tu registro en este momento. Lo dejé en revisión y lo verificaremos 🕒',\n" +
+        "    status: 'manual_review'\n" +
+        "  };\n" +
+        "}\n" +
         "return {\n" +
         "  chatId: ctx.chatId, phone: ctx.phone,\n" +
         "  nextStep: 6, distinctId: ctx.email, name: ctx.name, email: ctx.email,\n" +
         "  photoActivityId: '', invoiceRef: '',\n" +
-        "  replyText: '¡Listo, quedaste registrado! 📸 Mandame la foto de tu ticket.',\n" +
+        "  replyText: '¡Listo, ya quedaste registrado! 📸 Envíame la foto de tu ticket.',\n" +
         "  status: 'awaiting_photo'\n" +
         "};",
     },
@@ -659,7 +669,7 @@ const cancelConfirm = node({
         "  chatId: ctx.chatId, phone: ctx.phone,\n" +
         "  nextStep: 3, distinctId: '', name: '', email: '',\n" +
         "  photoActivityId: '', invoiceRef: '',\n" +
-        "  replyText: 'Sin problema, empecemos de nuevo. ¿Tu nombre?',\n" +
+        "  replyText: 'Sin problema, empecemos de nuevo. ¿Cuál es tu nombre?',\n" +
         "  status: 'awaiting_name'\n" +
         "};",
     },
@@ -678,7 +688,7 @@ const retryConfirm = node({
       language: 'javaScript',
       jsCode:
         "const ctx = $('Resolve Context').item.json;\n" +
-        "const reply = $json.reply_text || 'No te entendí. Respondé SÍ para confirmar o NO para corregir.';\n" +
+        "const reply = $json.reply_text || 'No te entendí. Responde SÍ para confirmar o NO para corregir.';\n" +
         "return {\n" +
         "  chatId: ctx.chatId, phone: ctx.phone,\n" +
         "  nextStep: 5, distinctId: ctx.distinctId, name: ctx.name, email: ctx.email,\n" +
@@ -741,7 +751,7 @@ const downloadFailed = node({
         "  chatId: ctx.chatId, phone: ctx.phone,\n" +
         "  nextStep: 6, distinctId: ctx.distinctId, name: ctx.name, email: ctx.email,\n" +
         "  photoActivityId: ctx.photoActivityId, invoiceRef: '',\n" +
-        "  replyText: 'No pude descargar tu foto, reintentá 📷',\n" +
+        "  replyText: 'No pude descargar tu foto. Inténtalo de nuevo 📷',\n" +
         "  status: 'awaiting_photo'\n" +
         "};",
     },
@@ -788,7 +798,7 @@ const readInvoice = node({
     name: 'Read Invoice (Vision)',
     parameters: {
       source: 'database',
-      workflowId: { __rl: true, mode: 'id', value: 'VeL0Lewf2pIojSsm' },
+      workflowId: { __rl: true, mode: 'id', value: 'OolJmLS6axxXNMNI' },
       workflowInputs: { mappingMode: 'passthrough' },
       options: { waitForSubWorkflow: true },
     },
@@ -1036,7 +1046,7 @@ const retailFailedReply = node({
         "  chatId: d.chatId, phone: d.phone,\n" +
         "  nextStep: 6, distinctId: d.distinctId, name: d.name, email: d.email,\n" +
         "  photoActivityId: d.activityId, invoiceRef: '',\n" +
-        "  replyText: 'Hubo un problema registrando tu compra, intentá más tarde',\n" +
+        "  replyText: 'Hubo un problema al registrar tu compra. Inténtalo más tarde',\n" +
         "  status: 'awaiting_photo'\n" +
         "};",
     },
@@ -1059,7 +1069,7 @@ const notLegibleReply = node({
         "  chatId: d.chatId, phone: d.phone,\n" +
         "  nextStep: 6, distinctId: d.distinctId, name: d.name, email: d.email,\n" +
         "  photoActivityId: '', invoiceRef: '',\n" +
-        "  replyText: 'Recibí un/a ' + (d.detected_type || 'documento') + ', no un ticket 📷. Mandame una foto clara de tu factura (JPG/PNG).',\n" +
+        "  replyText: 'Recibí un/a ' + (d.detected_type || 'documento') + ', no un ticket 📷. Envíame una foto clara de tu factura (JPG/PNG).',\n" +
         "  status: 'awaiting_photo'\n" +
         "};",
     },

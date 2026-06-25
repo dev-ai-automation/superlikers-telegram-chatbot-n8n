@@ -274,3 +274,59 @@ Para aislar el subworkflow de visión se montó un **harness** (`workflows/test-
 ![Factura legible (fixture)](../fixtures/invoice-legible.png)
 
 ![No-factura / selfie (fixture)](../fixtures/invoice-illegible.png)
+
+---
+
+# Recreación + pruebas con el chat `715690785` (2026-06-25)
+
+Los workflows habían sido borrados de la instancia n8n (solo sobrevivía el subworkflow `Superlikers: Request`). Se **recrearon desde las fuentes committeadas** vía el SDK de n8n (`create_workflow_from_code` + `validate_workflow` + verificación de `connections`) y se **re-testearon** simulando que el usuario escribe desde su chat real de Telegram `715690785`.
+
+## Workflows recreados (IDs nuevos)
+
+| Workflow | ID nuevo | Nodos | Credencial(es) auto-asignada(s) |
+|---|---|---|---|
+| `Superlikers: Telegram Ticket Bot (3z)` (principal) | `b3xPAom7g5D4fNJW` | 51 | telegramApi `[SL]: Jafet` (4 nodos) ✓ |
+| `Vision: Read Invoice` | `OolJmLS6axxXNMNI` | 5 | openAiApi `[Sandbox]: Jafet` ✓ |
+| `Conversation: Understand` | `BE5HDPv8zRivQn8D` | 8 | anthropicApi `[Sandbox]: Jafet` ✓ |
+| `Superlikers: Retry Queue Worker` | `z4T5TV6ibkNb0dyZ` | 10 | slackOAuth2Api `Global PR` ✓ |
+| `Superlikers: Request` (reutilizado) | `iMWPZE5gVhbc4Sge` | 4 | Bearer `[SL]: Jafet` (manual en UI) |
+
+- El SDK encadenó el fan-out de la foto de forma lineal; se corrigió vía `update_workflow` (**removeConnection** `Merge[0]→Read Invoice` + **addConnection** `Download[0]→Read Invoice`), dejando el fan-out correcto `Download → {Upload Photo, Read Invoice}`. Verificado en la ejecución `1798` (Combine & Decide lee `activityId` de Upload **y** `legible/ref/products` de Vision).
+- Las referencias `executeWorkflow` del principal se recablearon a los IDs nuevos de Vision/Conversation; el resto sigue apuntando a `iMWPZE5gVhbc4Sge`.
+
+## Script de simulación
+
+`scripts/simulate_conversation.py` construye los `update` de Telegram para `chat.id=715690785` y soporta dos modos: `--mode pindata` (para `test_workflow`) y `--mode webhook` (POSTea al webhook de producción; el bot responde en el chat real). Ver `scripts/README.md`.
+
+## Pruebas de simulación (`test_workflow` + pin data, chat `715690785`)
+
+Se pineó el `Telegram Trigger` con el update de `715690785`, `Get Session` con el estado de entrada y los `executeWorkflow`/HTTP de frontera con su salida canónica. La FSM (`Code`/`IF`/`Switch`) corrió **de verdad**. **Nota:** `Send Telegram Reply` **no** se pinea, así que cada caso **envió una respuesta real** al chat `715690785` (se ve en `result.message_id`).
+
+| Caso | Estado esperado | executionId | Resultado |
+|---|---|---|---|
+| 1 — Usuario NUEVO (rama phone) | `awaiting_name`, `currentStep=3` | `1788` (success) | **PASS** — msg real `30` |
+| 2 — Usuario EXISTENTE (salta a foto) | `awaiting_photo`, `currentStep=6` | `1797` (waiting) | **PASS** — msg real `39` |
+| 3 — Foto LEGIBLE → puntos | `completed`, `currentStep=9`, 250 pts | `1798` (success) | **PASS** — fan-out OK |
+| 4 — Foto ILEGIBLE → pide otra | pide otra; `Retail Buy` NO corre | `1799` (waiting) | **PASS** — sin monetización |
+| 5 — DUPLICADO (sha1) | "ya fue registrado" | `1800` (waiting) | **PASS** |
+
+`Persist Session` devuelve `replyText` en todos los casos (la columna existe y está mapeada): el fix del bug histórico sigue intacto.
+
+## Pruebas e2e REALES (webhook publicado) — hallazgos
+
+El bot está **publicado** y se le enviaron mensajes/fotos reales desde Telegram (`mode: webhook`). Hallazgos de la ejecución `1794` (foto real legible):
+
+1. **Vision REAL funciona** (sub-exec `1795`): GPT-4.1 leyó la factura → `legible:true`, `ref:"FAC-3Z-000142"`, 2 productos. El fan-out alimenta a Vision con el binario correcto.
+2. **Tono argentino → español neutro.** Los mensajes usaban voseo (`pasame`, `mandame`, `respondé`, `seguís`…). Se **neutralizaron** todos (tú, nunca vos) en el principal y en el `Blocked Response`/system prompt del NLU. Ver `prompts/messages/brand-templates.md` (v2).
+3. **BUG de robustez corregido — `After Register` no verificaba el alta.** El alta real `POST /participants` devolvió **422** `{"errors":{"tags":"no puede estar en blanco"},"code_error":21}` (exec `1791` → sub-exec `1793`), pero `After Register` avanzaba a `awaiting_photo` diciendo *"¡quedaste registrado!"*. Tres pasos después, `/photos` y `/retail/buy` daban **404** "Participante no encontrado" y el bot respondía un confuso *"Hubo un problema registrando tu compra"*. **Fix:** `After Register` ahora chequea `Register Participant.ok`; si falló, responde honesto y deja `manual_review` **sin** avanzar a foto.
+4. **BLOQUEO EXTERNO — `tags` de la campaña `3z`.** El alta exige un valor de `tags` que **debe existir en la lista configurada de la campaña en el panel de Superlikers**. El valor `qa-telegram` no es válido → la campaña lo trata como vacío (`422`). **Sin un `tags` válido, el participante no se crea y la foto legible no puede otorgar puntos end-to-end.** Esto es configuración del panel (externa al código), no un bug del workflow.
+
+### Trazabilidad — e2e real (chat `715690785`)
+
+| Evento | Referencia |
+|---|---|
+| Confirmación NLU real (Claude) | exec `1791` → sub-exec `1792` |
+| Alta real `POST /participants` → 422 `tags` | sub-exec `1793` |
+| Foto real legible (Vision OK, photo/buy 404) | exec `1794` → Vision sub-exec `1795`, buy sub-exec `1796` |
+
+> **Pendiente del dueño (admin@arthromed):** indicar un valor de `tags` válido de la campaña `3z` (o configurarlo en el panel). Con eso, el alta cierra y la foto legible otorga puntos de punta a punta.
