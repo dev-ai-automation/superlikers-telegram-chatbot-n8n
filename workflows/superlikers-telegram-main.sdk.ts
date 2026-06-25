@@ -166,6 +166,7 @@ const persistSession = node({
           photoActivityId: expr('{{ $json.photoActivityId }}'),
           invoiceRef: expr('{{ $json.invoiceRef }}'),
           status: expr('{{ $json.status }}'),
+          replyText: expr('{{ $json.replyText }}'),
         },
         matchingColumns: ['chatId'],
         schema: [
@@ -178,6 +179,7 @@ const persistSession = node({
           { id: 'photoActivityId', displayName: 'photoActivityId', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false },
           { id: 'invoiceRef', displayName: 'invoiceRef', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false },
           { id: 'status', displayName: 'status', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false },
+          { id: 'replyText', displayName: 'replyText', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: false },
         ],
       },
     },
@@ -755,7 +757,7 @@ const uploadPhoto = node({
     name: 'Upload Photo',
     parameters: {
       method: 'POST',
-      url: expr('{{ $env.BASE_URL || "https://api.superlikerslabs.com/v1" }}/photos'),
+      url: 'https://api.superlikerslabs.com/v1/photos',
       authentication: 'genericCredentialType',
       genericAuthType: 'httpBearerAuth',
       sendBody: true,

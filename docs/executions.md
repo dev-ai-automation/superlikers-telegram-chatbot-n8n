@@ -180,3 +180,61 @@ Pin: `Upload Photo` → `{error: "Sha1 is already taken"}` **statusCode 422**, `
 - **workflowId:** `BRG7YnCZ2GEpiO64`
 - **Data Table de sesión:** `AsmN5sq4Pop0FVCi` (`wa_superlikers_sessions`, project `ZBaqJyvdifxCV4uh`)
 - Filas de sesión sembradas para la simulación: `chatId` ∈ {`TEST3`, `TEST4`, `TEST5`} (estado inicial `awaiting_photo`). Casos `TEST1` y `TEST2` se crean durante su propia corrida.
+
+---
+
+## Pruebas en vivo (webhook real) — bug encontrado y corregido
+
+> A diferencia de los casos 1–5 (simulación con `test_workflow` + pin data), acá el workflow se **publicó** y se le escribieron **mensajes reales** desde Telegram. El `Telegram Trigger` recibe el update por el **webhook real** y la FSM responde sola. Esto destapó dos cosas que la simulación con pin data no podía ver: el manejo de `$env` en la instancia y la persistencia del `replyText`.
+
+### 1. Quite de `$env` — la instancia es n8n Community self-hosted
+
+Los workflows usaban `{{ $env.BASE_URL }}` para componer la URL de los endpoints Superlikers. En esta instancia **n8n Community self-hosted** las expresiones `$env` **no resuelven** (la variable no está expuesta al motor de expresiones), así que la URL quedaba vacía/rota y las llamadas HTTP fallaban antes de salir.
+
+**Fix:** se reemplazó `$env.BASE_URL` por la URL **literal** `https://api.superlikerslabs.com/v1/...` en todos los workflows. Afectó:
+
+- Subworkflow **Superlikers: Request** → nodo `Call Superlikers API`.
+- Principal → nodo `Upload Photo` → `url: https://api.superlikerslabs.com/v1/photos`.
+
+Aplicado en vivo y reflejado en los `.json` committeados. Verificado: ya no queda **ninguna** referencia `$env` en el workflow exportado.
+
+### 2. Ejecución real `1741` — `Bad Request: message text is empty`
+
+**Input (redactado):** el usuario mandó un `Hola` desde `chatId=7156•••85`. El update entró por el webhook real, la FSM corrió, pero el nodo **`Send Telegram Reply` falló** con:
+
+```
+Bad Request: message text is empty
+```
+
+**Causa raíz:** el `replyText` se calcula bien en los nodos `Code` de la FSM (p.ej. `Default To Phone` arma "¡Hola! Para empezar, pasame tu número…"), pero **`Persist Session` (Data Table) no tenía la columna `replyText`**. El nodo `upsert` devuelve la **fila guardada** (solo las columnas que existen en la tabla), así que al pasar de `Persist Session` → `Send Telegram Reply` el `replyText` **se perdía**: `Send Telegram Reply` leía `{{ $json.replyText }}` y recibía vacío → Telegram rechaza el `sendMessage` con texto vacío.
+
+> Es un bug de **forma del dato post-Data Table**, invisible en la simulación: los casos 1–5 asertaban contra la salida de los nodos `Code` (donde `replyText` sí está), no contra lo que devuelve `Persist Session`.
+
+### 3. Fix — columna `replyText` + mapeo en `Persist Session`
+
+1. Se agregó la columna **`replyText` (string)** a la Data Table `AsmN5sq4Pop0FVCi` (`wa_superlikers_sessions`).
+2. Se mapeó `replyText: {{ $json.replyText }}` en el nodo `Persist Session` (tanto en `columns.value` como en el `schema`).
+
+Ahora `Persist Session` devuelve el `replyText` que `Send Telegram Reply` necesita río abajo.
+
+### 4. Verificación — ejecución `1742`
+
+Se corrió `test_workflow` (exec **`1742`**): `Persist Session` **ya devuelve `replyText`** en su salida. Confirmado el dato que faltaba.
+
+### 5. Re-publicación y envío real del bot
+
+Con el fix aplicado se **re-publicó** el workflow (`activeVersionId` `23bbcff0`). Se verificó **punta a punta** escribiendo un mensaje real al bot: respondió correctamente (`message_id` **6**). El bug de `message text is empty` ya no aparece.
+
+### 6. PENDIENTE — bindear la credencial Bearer de Superlikers
+
+Los endpoints reales de Superlikers (search / register / photos / buy / accept) siguen devolviendo error hasta que se **seleccione a mano** la credencial Bearer `[SL]: Jafet` (`SXkzMC9XmTKtBrB5`, `httpBearerAuth`) en el nodo `Call Superlikers API` del subworkflow **Request**. No es un bug: es una **limitación del MCP de n8n**, que no puede bindear auth genérica de HTTP — el método ya queda preconfigurado (`genericCredentialType` + `httpBearerAuth`), solo falta el clic en la UI. La FSM tolera ese error sin romperse (las ramas manejan el fallo de la API). Ver `docs/environment.md` → "n8n Community: sin `$env`".
+
+### Trazabilidad — pruebas en vivo
+
+| Evento | Referencia |
+| --- | --- |
+| Ejecución del bug (webhook real, `Hola`) | exec `1741` |
+| Ejecución de verificación del fix | exec `1742` |
+| `activeVersionId` tras re-publicar | `23bbcff0` |
+| Mensaje real de respuesta del bot | `message_id` `6` |
+| Columna agregada | `replyText` (string) en `AsmN5sq4Pop0FVCi` |

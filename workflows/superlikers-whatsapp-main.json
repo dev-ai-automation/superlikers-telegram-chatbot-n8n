@@ -471,7 +471,7 @@
       "position": [2040, 1100],
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.BASE_URL || \"https://api.superlikerslabs.com/v1\" }}/photos",
+        "url": "https://api.superlikerslabs.com/v1/photos",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpBearerAuth",
         "sendBody": true,

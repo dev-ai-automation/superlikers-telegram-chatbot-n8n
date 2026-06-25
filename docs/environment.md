@@ -1,10 +1,23 @@
 # Entorno y credenciales
 
-## Variables de entorno (n8n)
+## n8n Community: sin `$env`
+
+> **La instancia es n8n Community self-hosted.** Las expresiones `{{ $env.* }}` **no resuelven** en Community (la variable no está expuesta al motor de expresiones), así que cualquier URL armada con `$env.BASE_URL` quedaba vacía y las llamadas HTTP fallaban antes de salir.
+
+Por eso se **reemplazó `$env.BASE_URL` por la URL literal** `https://api.superlikerslabs.com/v1/...` en todos los workflows:
+
+- Subworkflow **Superlikers: Request** → nodo `Call Superlikers API`.
+- Principal → nodo `Upload Photo` (`https://api.superlikerslabs.com/v1/photos`).
+
+La tabla de abajo deja `BASE_URL` / `CAMPAIGN` como **referencia documental** (qué base y qué campaña se usan), **no** como variables de entorno que el workflow lea en runtime — los valores van **literales** en los nodos.
+
+> **Recordatorio (paso manual):** la credencial Bearer `[SL]: Jafet` (`SXkzMC9XmTKtBrB5`, `httpBearerAuth`) hay que **seleccionarla a mano** en el nodo `Call Superlikers API` del subworkflow Request. El MCP de n8n no puede bindear auth genérica de HTTP; hasta que se haga, los endpoints reales de Superlikers devuelven error (la FSM lo tolera). Ver `docs/executions.md` → "Pruebas en vivo".
+
+## Variables de referencia (valores literales en los nodos)
 
 | Var | Valor | Uso |
 |---|---|---|
-| `BASE_URL` | `https://api.superlikerslabs.com/v1` | Base de todos los endpoints Superlikers |
+| `BASE_URL` | `https://api.superlikerslabs.com/v1` | Base de todos los endpoints Superlikers (literal en los nodos, **no** `$env`) |
 | `CAMPAIGN` | `3z` | Campaña (entorno labs) |
 
 > El **bot token** de Telegram NO es una variable de entorno: vive solo en la credencial `telegramApi` de n8n.

@@ -17,3 +17,7 @@ Thumbs.db
 # Node (por si se agrega tooling)
 node_modules/
 npm-debug.log*
+
+# Python (helper de pruebas en scripts/)
+__pycache__/
+*.py[cod]
